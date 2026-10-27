@@ -1,6 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Noto+Sans+Thai:wght@300;400;500;600;700;800&display=swap');
+@import "tailwindcss";
 
-/* ===== Design Tokens ===== */
+/* ===== Design Tokens (เหมือนเดิมทุกค่า) ===== */
 :root {
   /* Colors */
   --bg-primary: #0a0a0f;
@@ -46,7 +47,8 @@
   --space-2xl: 3rem;
   --space-3xl: 4rem;
 
-  /* Border Radius */
+  /* Border Radius
+     (ชื่อเดียวกับ theme ของ Tailwind จึงทำให้ rounded-sm/md/lg/xl = 8/12/16/24px) */
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
@@ -59,50 +61,124 @@
   --transition-slow: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ===== Reset & Base ===== */
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+/* ===== Light Theme ===== */
+html.light {
+  --bg-primary: #f5f5f7;
+  --bg-secondary: #ffffff;
+  --bg-card: rgba(0, 0, 0, 0.03);
+  --bg-card-hover: rgba(0, 0, 0, 0.06);
+  --bg-glass: rgba(0, 0, 0, 0.04);
+  --bg-glass-strong: rgba(0, 0, 0, 0.08);
+
+  --text-primary: #111118;
+  --text-secondary: #5c5c70;
+  --text-muted: #9898a8;
+
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --border-light: rgba(0, 0, 0, 0.14);
+
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.12);
+  --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.15);
+
+  --gradient-card: linear-gradient(145deg, rgba(0,0,0,0.02), rgba(0,0,0,0.01));
 }
 
-html {
-  scroll-behavior: smooth;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+/* ===== Tailwind theme: อ้างอิงตัวแปรด้านบน ไม่ต้องแก้สองที่ ===== */
+@theme inline {
+  --color-app: var(--bg-primary);
+  --color-panel: var(--bg-secondary);
+  --color-glass: var(--bg-glass);
+  --color-glass-strong: var(--bg-glass-strong);
+  --color-line: var(--border-subtle);
+  --color-line-light: var(--border-light);
+  --color-ink: var(--text-primary);
+  --color-ink-2: var(--text-secondary);
+  --color-ink-3: var(--text-muted);
+  --color-orange: var(--accent-orange);
+  --color-amber: var(--accent-amber);
+  --color-green: var(--accent-green);
+  --color-red: var(--accent-red);
+  --color-blue: var(--accent-blue);
+  --color-purple: var(--accent-purple);
 }
 
-body {
-  font-family: 'Inter', 'Noto Sans Thai', -apple-system, BlinkMacSystemFont, sans-serif;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  line-height: 1.6;
-  min-height: 100vh;
-  overflow-x: hidden;
+/* ชื่อ animation ของ Tailwind ใช้ keyframes ที่ประกาศไว้ด้านล่าง
+   (ตั้งชื่อไม่ซ้ำกับคลาส .animate-fade-in ฯลฯ เดิม เพื่อไม่ให้ชนกัน) */
+@theme {
+  --animate-drop-in: slideDown 0.4s ease;
+  --animate-card-in: fadeIn 0.4s ease both;
+  --animate-fade-quick: fadeIn 0.2s ease;
+  --animate-rise: fadeInUp 0.4s ease;
+  --animate-drawer: slideInRight 0.3s ease;
+  --animate-pop: bounceIn 0.3s ease;
+  --animate-pop-slow: bounceIn 0.6s ease;
+  --animate-zoom-in: scaleIn 0.5s ease;
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
+/* ===== Utilities ที่ใช้ซ้ำ ===== */
+@utility bg-gradient-primary {
+  background: var(--gradient-primary);
+}
+@utility bg-gradient-card {
+  background: var(--gradient-card);
+}
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
 
-button {
-  cursor: pointer;
-  border: none;
-  outline: none;
-  font-family: inherit;
-}
+/* ===== Reset & Base =====
+   สำคัญ: ต้องอยู่ใน @layer base
+   ถ้าเขียนนอก layer กฎ "* { margin:0; padding:0 }" จะชนะ utility ของ Tailwind
+   ทั้งหมด (p-4, m-2, ...) และ padding/margin จะหายหมด */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
 
-input, select, textarea {
-  font-family: inherit;
-  outline: none;
-}
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 
-img {
-  max-width: 100%;
-  display: block;
+  body {
+    font-family: 'Inter', 'Noto Sans Thai', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.6;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  button {
+    cursor: pointer;
+    border: none;
+    outline: none;
+    font-family: inherit;
+  }
+
+  input, select, textarea {
+    font-family: inherit;
+    outline: none;
+  }
+
+  img {
+    max-width: 100%;
+    display: block;
+  }
 }
 
 /* ===== Scrollbar ===== */
@@ -120,22 +196,121 @@ img {
   background: rgba(255, 255, 255, 0.2);
 }
 
-/* ===== Utility Classes ===== */
-.glass {
-  background: var(--bg-glass);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--border-subtle);
+/* ===== Component classes เดิม (อยู่ใน layer components เพื่อให้ utility override ได้) ===== */
+@layer components {
+  .glass {
+    background: var(--bg-glass);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--border-subtle);
+  }
+
+  .glass-strong {
+    background: var(--bg-glass-strong);
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
+    border: 1px solid var(--border-light);
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease forwards;
+  }
+
+  .animate-fade-in-up {
+    animation: fadeInUp 0.6s ease forwards;
+  }
+
+  .animate-scale-in {
+    animation: scaleIn 0.4s ease forwards;
+  }
+
+  .animate-bounce-in {
+    animation: bounceIn 0.5s ease forwards;
+  }
+
+  /* Toast / Notification */
+  .toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .toast {
+    padding: 14px 20px;
+    border-radius: var(--radius-md);
+    color: white;
+    font-weight: 500;
+    font-size: 0.9rem;
+    animation: slideInRight 0.3s ease, fadeIn 0.3s ease;
+    box-shadow: var(--shadow-lg);
+    min-width: 280px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .toast-success { background: linear-gradient(135deg, #2dd4a8, #22c55e); }
+  .toast-error   { background: linear-gradient(135deg, #ff4757, #ef4444); }
+  .toast-info    { background: linear-gradient(135deg, #5b9aff, #3b82f6); }
+
+  /* Badge */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 10px;
+    border-radius: var(--radius-full);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+
+  .badge-orange { background: rgba(255, 107, 53, 0.15); color: var(--accent-orange); }
+  .badge-green  { background: rgba(45, 212, 168, 0.15); color: var(--accent-green); }
+  .badge-red    { background: rgba(255, 71, 87, 0.15);  color: var(--accent-red); }
+  .badge-blue   { background: rgba(91, 154, 255, 0.15); color: var(--accent-blue); }
+  .badge-purple { background: rgba(168, 85, 247, 0.15); color: var(--accent-purple); }
+
+  /* Loading Spinner */
+  .spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--border-subtle);
+    border-top: 3px solid var(--accent-orange);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(8px);
+    z-index: 5000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn 0.2s ease;
+  }
+
+  .modal-content {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-xl);
+    padding: var(--space-2xl);
+    max-width: 500px;
+    width: 90%;
+    animation: scaleIn 0.3s ease;
+    box-shadow: var(--shadow-lg);
+  }
 }
 
-.glass-strong {
-  background: var(--bg-glass-strong);
-  backdrop-filter: blur(30px);
-  -webkit-backdrop-filter: blur(30px);
-  border: 1px solid var(--border-light);
-}
-
-/* ===== Animations ===== */
+/* ===== Keyframes (เหมือนเดิม) ===== */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
@@ -195,130 +370,6 @@ img {
   to { opacity: 1; transform: translateY(0); }
 }
 
-.animate-fade-in {
-  animation: fadeIn 0.5s ease forwards;
-}
-
-.animate-fade-in-up {
-  animation: fadeInUp 0.6s ease forwards;
-}
-
-.animate-scale-in {
-  animation: scaleIn 0.4s ease forwards;
-}
-
-.animate-bounce-in {
-  animation: bounceIn 0.5s ease forwards;
-}
-
-/* ===== Toast / Notification ===== */
-.toast-container {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  z-index: 10000;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.toast {
-  padding: 14px 20px;
-  border-radius: var(--radius-md);
-  color: white;
-  font-weight: 500;
-  font-size: 0.9rem;
-  animation: slideInRight 0.3s ease, fadeIn 0.3s ease;
-  box-shadow: var(--shadow-lg);
-  min-width: 280px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.toast-success {
-  background: linear-gradient(135deg, #2dd4a8, #22c55e);
-}
-
-.toast-error {
-  background: linear-gradient(135deg, #ff4757, #ef4444);
-}
-
-.toast-info {
-  background: linear-gradient(135deg, #5b9aff, #3b82f6);
-}
-
-/* ===== Badge ===== */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2px 10px;
-  border-radius: var(--radius-full);
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.3px;
-}
-
-.badge-orange {
-  background: rgba(255, 107, 53, 0.15);
-  color: var(--accent-orange);
-}
-
-.badge-green {
-  background: rgba(45, 212, 168, 0.15);
-  color: var(--accent-green);
-}
-
-.badge-red {
-  background: rgba(255, 71, 87, 0.15);
-  color: var(--accent-red);
-}
-
-.badge-blue {
-  background: rgba(91, 154, 255, 0.15);
-  color: var(--accent-blue);
-}
-
-.badge-purple {
-  background: rgba(168, 85, 247, 0.15);
-  color: var(--accent-purple);
-}
-
-/* ===== Loading Spinner ===== */
-.spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid var(--border-subtle);
-  border-top: 3px solid var(--accent-orange);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
 @keyframes spin {
   to { transform: rotate(360deg); }
-}
-
-/* ===== Modal Overlay ===== */
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(8px);
-  z-index: 5000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: fadeIn 0.2s ease;
-}
-
-.modal-content {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-xl);
-  padding: var(--space-2xl);
-  max-width: 500px;
-  width: 90%;
-  animation: scaleIn 0.3s ease;
-  box-shadow: var(--shadow-lg);
 }
