@@ -263,7 +263,7 @@ erDiagram
 
 ```bash
 # Clone โปรเจกต์
-git clone https://github.com/your-username/pos-restaurant.git
+git clone https://github.com/EzGuiy/ProJ3K.git
 
 # เข้าสู่โฟลเดอร์โปรเจกต์
 cd ProJ3K
