@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation";
 import styles from "./staff.module.css";
 
 const statusConfig = {
-  pending: { label: "รอดำเนินการ", icon: " ", color: "orange", next: "preparing" },
-  preparing: { label: "กำลังเตรียม", icon: "", color: "blue", next: "ready" },
-  ready: { label: "พร้อมเสิร์ฟ", icon: "", color: "green", next: "served" },
-  served: { label: "เสิร์ฟแล้ว", icon: "", color: "purple", next: null },
-  cancelled: { label: "ยกเลิก", icon: "", color: "red", next: null },
+  pending: { label: "รอดำเนินการ", icon: "⏳", color: "orange", next: "preparing" },
+  preparing: { label: "กำลังปรุง", icon: "🔥", color: "blue", next: "ready" },
+  ready: { label: "🔔 พร้อมเสิร์ฟ (เชฟตรวจผ่าน QC แล้ว)", icon: "⭐", color: "green", next: "served" },
+  served: { label: "เสิร์ฟแล้ว", icon: "✅", color: "purple", next: null },
+  cancelled: { label: "ยกเลิก", icon: "❌", color: "red", next: null },
 };
 
 export default function StaffPage() {
@@ -54,16 +54,57 @@ export default function StaffPage() {
     }
   };
 
+  // เสิร์ฟเฉพาะ 1 จาน
+  const handleServeItem = async (orderId, orderItemId, e) => {
+    if (e) e.stopPropagation();
+    try {
+      const response = await fetch(`/api/orders/${orderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "serve_item", order_item_id: orderItemId }),
+      });
+      if (response.ok) {
+        fetchOrders();
+      }
+    } catch (error) {
+      console.error("Error serving item:", error);
+    }
+  };
+
+  // เสิร์ฟเฉพาะรายการที่เชฟทำเสร็จแล้วในออเดอร์นี้
+  const handleServeReady = async (orderId, e) => {
+    if (e) e.stopPropagation();
+    try {
+      const response = await fetch(`/api/orders/${orderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "serve_ready" }),
+      });
+      if (response.ok) {
+        fetchOrders();
+      }
+    } catch (error) {
+      console.error("Error serving ready items:", error);
+    }
+  };
+
   const filteredOrders = orders
-    .filter((o) => filterStatus === "all" || o.status === filterStatus)
+    .filter((o) => {
+      if (filterStatus === "all") return true;
+      if (filterStatus === "ready") return o.readyCount > 0 || o.status === "ready";
+      if (filterStatus === "preparing") return (o.cookingCount > 0 && o.readyCount === 0) || o.status === "preparing";
+      if (filterStatus === "pending") return (o.pendingCount > 0 && o.cookingCount === 0 && o.readyCount === 0) || o.status === "pending";
+      if (filterStatus === "served") return o.status === "served" || (o.items?.length > 0 && o.servedCount === o.items.length);
+      return o.status === filterStatus;
+    })
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
   const orderCounts = {
     all: orders.length,
-    pending: orders.filter((o) => o.status === "pending").length,
-    preparing: orders.filter((o) => o.status === "preparing").length,
-    ready: orders.filter((o) => o.status === "ready").length,
-    served: orders.filter((o) => o.status === "served").length,
+    pending: orders.filter((o) => o.pendingCount > 0 && o.cookingCount === 0 && o.readyCount === 0).length,
+    preparing: orders.filter((o) => o.cookingCount > 0 && o.readyCount === 0).length,
+    ready: orders.filter((o) => o.readyCount > 0 || o.status === "ready").length,
+    served: orders.filter((o) => o.status === "served" || (o.items?.length > 0 && o.servedCount === o.items.length)).length,
   };
 
   const formatTime = (dateStr) => {
@@ -142,6 +183,43 @@ export default function StaffPage() {
         </div>
       </div>
 
+      {/* Ready Alert Banner */}
+      {orderCounts.ready > 0 && (
+        <div
+          style={{
+            margin: "0 1.5rem 1rem",
+            padding: "0.85rem 1.25rem",
+            background: "rgba(45, 212, 168, 0.15)",
+            border: "1px solid var(--accent-green)",
+            borderRadius: "var(--radius-md)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            animation: "pulse 2s infinite",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{ fontSize: "1.4rem" }}>⭐🔔</span>
+            <div>
+              <strong style={{ color: "var(--accent-green)" }}>
+                มี {orderCounts.ready} ออเดอร์พร้อมเสิร์ฟ! (เชฟปรุงเสร็จและผ่านการตรวจคุณภาพแล้ว)
+              </strong>
+              <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
+                กรุณาตรวจสอบหมายเลขโต๊ะและนำอาหารไปส่งให้ลูกค้า
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            className={styles.filterBtn}
+            style={{ background: "var(--accent-green)", color: "#0a0a0f", fontWeight: 700 }}
+            onClick={() => setFilterStatus("ready")}
+          >
+            ดูออเดอร์ที่พร้อมเสิร์ฟ
+          </button>
+        </div>
+      )}
+
       {/* Filters */}
       <div className={styles.filters}>
         {[
@@ -207,11 +285,11 @@ export default function StaffPage() {
                 <div className={styles.orderCustomer}>
                   <div className={styles.customerInfo}>
                     <span className={styles.customerName}>
-                      {order.isMember ? "" : ""} {order.customerName}
+                      {order.isMember ? "⭐ " : ""}{order.customerName}
                     </span>
                     {order.tableNumber !== "-" && (
                       <span className={styles.tableNum}>
-                        โต๊ะ {order.tableNumber}
+                        📍 โต๊ะ {order.tableNumber}
                       </span>
                     )}
                   </div>
@@ -220,26 +298,109 @@ export default function StaffPage() {
                   </span>
                 </div>
 
-                {/* Items Summary */}
+                {/* Progress Summary */}
+                <div className={styles.orderProgressSummary}>
+                  <span>
+                    เสิร์ฟแล้ว {order.servedCount || 0}/{order.items?.length || 0} จาน
+                  </span>
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                    {order.readyCount > 0 && (
+                      <span style={{ color: "#2dd4a8", fontWeight: 700 }}>
+                        ⭐ พร้อมเสิร์ฟ {order.readyCount}
+                      </span>
+                    )}
+                    {order.cookingCount > 0 && (
+                      <span style={{ color: "#60a5fa" }}>
+                        🔥 กำลังปรุง {order.cookingCount}
+                      </span>
+                    )}
+                    {order.pendingCount > 0 && (
+                      <span style={{ color: "#fbbf24" }}>
+                        ⏳ รอคิว {order.pendingCount}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Items Summary with per-item status & serve button */}
                 <div className={styles.orderItems}>
                   {order.items
-                    .slice(0, isExpanded ? order.items.length : 3)
-                    .map((item, idx) => (
-                      <div key={idx} className={styles.orderItem}>
-                        <span className={styles.orderItemEmoji}>
-                          {item.image}
-                        </span>
-                        <span className={styles.orderItemName}>
-                          {item.name}
-                        </span>
-                        <span className={styles.orderItemQty}>
-                          x{item.quantity}
-                        </span>
-                      </div>
-                    ))}
-                  {!isExpanded && order.items.length > 3 && (
+                    .slice(0, isExpanded ? order.items.length : 5)
+                    .map((item, idx) => {
+                      const isReady = item.kitchen_status === "READY";
+                      const isCooking = item.kitchen_status === "COOKING";
+                      const isServed = item.kitchen_status === "SERVED";
+                      const isPending = item.kitchen_status === "PENDING";
+
+                      return (
+                        <div
+                          key={item.order_item_id || idx}
+                          className={`${styles.orderItem} ${isReady ? styles.itemReadyHighlight : ""} ${isServed ? styles.itemServed : ""}`}
+                        >
+                          <span className={styles.orderItemEmoji}>
+                            {item.image}
+                          </span>
+                          <div className={styles.orderItemDetails}>
+                            <div className={styles.orderItemHeaderRow}>
+                              <span className={styles.orderItemName} style={{ textDecoration: isServed ? "line-through" : "none" }}>
+                                {item.name}
+                              </span>
+                              <span className={styles.orderItemQty}>
+                                x{item.quantity}
+                              </span>
+                            </div>
+                            <div className={styles.orderItemSubRow}>
+                              {item.station_code && (
+                                <span className={styles.stationBadge}>
+                                  {item.station_code}
+                                </span>
+                              )}
+                              {isReady && (
+                                <span className={styles.statusBadgeReady}>
+                                  ⭐ เชฟปรุงเสร็จ พร้อมเสิร์ฟ!
+                                </span>
+                              )}
+                              {isCooking && (
+                                <span className={styles.statusBadgeCooking}>
+                                  🔥 กำลังปรุง
+                                </span>
+                              )}
+                              {isPending && (
+                                <span className={styles.statusBadgePending}>
+                                  ⏳ รอคิวปรุง
+                                </span>
+                              )}
+                              {isServed && (
+                                <span className={styles.statusBadgeServed}>
+                                  ✅ เสิร์ฟแล้ว
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* ปุ่มเสิร์ฟเฉพาะจานนี้ */}
+                          {isReady && (
+                            <button
+                              type="button"
+                              className={styles.serveItemBtn}
+                              onClick={(e) =>
+                                handleServeItem(
+                                  order.order_id,
+                                  item.order_item_id,
+                                  e
+                                )
+                              }
+                              title="เสิร์ฟจานนี้ให้ลูกค้าทันที"
+                            >
+                              🍽️ เสิร์ฟจานนี้
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  {!isExpanded && order.items.length > 5 && (
                     <div className={styles.moreItems}>
-                      +{order.items.length - 3} รายการเพิ่มเติม
+                      +{order.items.length - 5} รายการเพิ่มเติม (คลิกเพื่อดูทั้งหมด)
                     </div>
                   )}
                 </div>
@@ -247,39 +408,51 @@ export default function StaffPage() {
                 {/* Note */}
                 {order.note && (
                   <div className={styles.orderNote}>
-                    {order.note}
+                    📝 {order.note}
                   </div>
                 )}
 
                 {/* Actions */}
-                {config.next && (
-                  <div
-                    className={styles.orderActions}
-                    onClick={(e) => e.stopPropagation()}
-                  >
+                <div
+                  className={styles.orderActions}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* ปุ่มเสิร์ฟรายการที่พร้อมทั้งหมด */}
+                  {order.readyCount > 0 && (
                     <button
+                      type="button"
                       className={styles.actionBtnPrimary}
-                      onClick={() => handleStatusChange(order.id, config.next)}
+                      onClick={(e) => handleServeReady(order.order_id, e)}
                     >
-                      {statusConfig[config.next].icon}{" "}
-                      {config.next === "preparing"
-                        ? "เริ่มเตรียม"
-                        : config.next === "ready"
-                        ? "เตรียมเสร็จ"
-                        : "เสิร์ฟแล้ว"}
+                      ⭐ เสิร์ฟเฉพาะรายการที่พร้อม ({order.readyCount} จาน)
                     </button>
-                    {order.status === "pending" && (
-                      <button
-                        className={styles.actionBtnCancel}
-                        onClick={() =>
-                          handleStatusChange(order.id, "cancelled")
-                        }
-                      >
-                        ยกเลิก
-                      </button>
-                    )}
-                  </div>
-                )}
+                  )}
+
+                  {/* ป้ายแจ้งเตือนเมื่อกำลังทำและไม่มีรายการพร้อม */}
+                  {order.readyCount === 0 && (order.cookingCount > 0 || order.pendingCount > 0) && (
+                    <div className={styles.kitchenProgressNotice}>
+                      <span>⏳ ครัวกำลังดำเนินการ ({order.cookingCount} ปรุง, {order.pendingCount} รอคิว)</span>
+                    </div>
+                  )}
+
+                  {/* ป้ายเมื่อเสิร์ฟครบทุกรายการแล้ว */}
+                  {order.items.length > 0 && order.servedCount === order.items.length && (
+                    <div className={styles.allServedNotice}>
+                      <span>✅ เสิร์ฟครบทุกรายการแล้ว ({order.servedCount}/{order.items.length})</span>
+                    </div>
+                  )}
+
+                  {/* ปุ่มยกเลิกเมื่อยังไม่มีรายการใดเริ่มทำ */}
+                  {order.status === "pending" && order.servedCount === 0 && order.readyCount === 0 && order.cookingCount === 0 && (
+                    <button
+                      type="button"
+                      className={styles.actionBtnCancel}
+                      onClick={() => handleStatusChange(order.order_id, "cancelled")}
+                    >
+                      ยกเลิกออเดอร์
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })}

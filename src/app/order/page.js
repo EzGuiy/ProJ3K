@@ -1,8 +1,8 @@
+
 "use client";
 
 import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { menuCategories, menuItems } from "@/lib/menu";
 
 /* ---------- Shared bits ---------- */
 
@@ -91,17 +91,156 @@ function OrderPageContent() {
   const memberName = searchParams.get("name") || "";
   const memberPhone = searchParams.get("phone") || "";
 
+  // Menu data from MySQL Database
+  const [menuItems, setMenuItems] = useState([]);
+  const [menuCategories, setMenuCategories] = useState([
+    { id: "all", name: "ทั้งหมด", icon: "🍽️" },
+  ]);
+  const [loadingMenu, setLoadingMenu] = useState(true);
+
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [cart, setCart] = useState([]);
   const [tableNumber, setTableNumber] = useState("");
+  const [isTableBound, setIsTableBound] = useState(false);
+  const [showTableModal, setShowTableModal] = useState(false);
   const [note, setNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [showCart, setShowCart] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
   const [orderId, setOrderId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isDark, setIsDark] = useState(true);
+
+  // สถานะการติดตามออเดอร์ของโต๊ะนี้
+  const [tableOrders, setTableOrders] = useState([]);
+  const [showTracker, setShowTracker] = useState(false);
+  const [newOrderSuccessId, setNewOrderSuccessId] = useState(null);
+
+  // ดึงรายการออเดอร์ทั้งหมดของโต๊ะนี้ (ทั้งที่กำลังทำและเสิร์ฟแล้ว)
+  const fetchTableOrders = useCallback(async () => {
+    if (!tableNumber) return;
+    try {
+      const res = await fetch(`/api/orders?table=${encodeURIComponent(tableNumber)}&session=true`);
+      if (res.ok) {
+        const data = await res.json();
+        setTableOrders(data.orders || []);
+      }
+    } catch (err) {
+      console.error("Error fetching table orders:", err);
+    }
+  }, [tableNumber]);
+
+  // คอยอัปเดตสถานะของโต๊ะนี้อัตโนมัติทุก 5 วินาที
+  useEffect(() => {
+    if (!tableNumber) return;
+    fetchTableOrders();
+    const interval = setInterval(fetchTableOrders, 5000);
+    return () => clearInterval(interval);
+  }, [tableNumber, fetchTableOrders]);
+
+  // รวมรายการอาหารทั้งหมดของโต๊ะนี้
+  const allTableItems = useMemo(() => {
+    const list = [];
+    for (const ord of tableOrders) {
+      for (const it of ord.items || []) {
+        list.push({
+          ...it,
+          orderId: ord.id || ord.short_id,
+          orderTime: ord.createdAt,
+        });
+      }
+    }
+    return list;
+  }, [tableOrders]);
+
+  // แยกรายการที่ "ยังไม่มาเสิร์ฟ" (PENDING, COOKING, READY)
+  const unservedItems = useMemo(() => {
+    return allTableItems.filter((it) => it.kitchen_status !== "SERVED");
+  }, [allTableItems]);
+
+  // แยกรายการที่ "เสิร์ฟแล้ว" (SERVED)
+  const servedItems = useMemo(() => {
+    return allTableItems.filter((it) => it.kitchen_status === "SERVED");
+  }, [allTableItems]);
+
+  const tableUnservedCount = unservedItems.reduce((sum, it) => sum + (it.quantity || 1), 0);
+  const tableServedCount = servedItems.reduce((sum, it) => sum + (it.quantity || 1), 0);
+  const tableTotalItemsCount = tableUnservedCount + tableServedCount;
+
+  // ล็อกและจดจำหมายเลขโต๊ะสำหรับเครื่อง POS นี้โดยอัตโนมัติ
+  useEffect(() => {
+    const urlTable = searchParams.get("table");
+    if (urlTable) {
+      setTableNumber(urlTable);
+      setIsTableBound(true);
+      try {
+        localStorage.setItem("pos_table_number", urlTable);
+      } catch (e) {}
+    } else {
+      try {
+        const savedTable = localStorage.getItem("pos_table_number");
+        if (savedTable) {
+          setTableNumber(savedTable);
+          setIsTableBound(true);
+        }
+      } catch (e) {}
+    }
+  }, [searchParams]);
+
+  const handleBindTable = (num) => {
+    setTableNumber(num);
+    setIsTableBound(true);
+    try {
+      localStorage.setItem("pos_table_number", num);
+    } catch (e) {}
+    setShowTableModal(false);
+  };
+
+  // ดึงรายการเมนูจาก MySQL Database ผ่าน API
+  useEffect(() => {
+    fetch("/api/menus")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.categories) {
+          const catIcons = {
+            cat_appetizer: "🥗",
+            cat_main: "🍛",
+            cat_noodle: "🍜",
+            cat_grill: "🍢",
+            cat_seafood: "🦐",
+            cat_dessert: "🥭",
+            cat_drink: "🧋",
+          };
+          const mappedCats = [
+            { id: "all", name: "ทั้งหมด", icon: "🍽️" },
+            ...data.categories.map((c) => ({
+              id: c.category_id,
+              name: c.name,
+              icon: catIcons[c.category_id] || "🍽️",
+            })),
+          ];
+          setMenuCategories(mappedCats);
+        }
+        if (data.menus) {
+          const mapped = data.menus.map((m) => ({
+            id: m.menu_id,
+            menu_id: m.menu_id,
+            name: m.name,
+            nameEn: m.name_en || "",
+            description: m.description || "",
+            price: Number(m.price),
+            category: m.category_id,
+            image: m.image_url || "🍽️",
+            image_url: m.image_url || "🍽️",
+            popular: Boolean(m.is_popular),
+            spicyLevel: Number(m.spicy_level || 0),
+          }));
+          setMenuItems(mapped);
+        }
+      })
+      .catch((err) => console.error("Fetch menus error:", err))
+      .finally(() => setLoadingMenu(false));
+  }, []);
 
   // Initialise theme from localStorage, then sync html class on every change
   useEffect(() => {
@@ -134,7 +273,7 @@ function OrderPageContent() {
       );
     }
     return items;
-  }, [selectedCategory, searchQuery]);
+  }, [menuItems, selectedCategory, searchQuery]);
 
   const cartTotal = useMemo(
     () => cart.reduce((sum, item) => sum + item.price * item.quantity, 0),
@@ -194,6 +333,7 @@ function OrderPageContent() {
     return () => window.removeEventListener("keydown", onKey);
   }, [showCart]);
 
+  // ส่งออเดอร์ลง MySQL Database
   const handleSubmitOrder = async () => {
     if (cart.length === 0) return;
 
@@ -209,7 +349,8 @@ function OrderPageContent() {
           isMember,
           tableNumber: tableNumber || "-",
           items: cart.map((item) => ({
-            id: item.id,
+            id: item.menu_id || item.id,
+            menu_id: item.menu_id || item.id,
             name: item.name,
             nameEn: item.nameEn,
             price: item.price,
@@ -222,16 +363,20 @@ function OrderPageContent() {
 
       const data = await response.json();
       if (response.ok) {
-        setOrderId(data.order.id);
-        setShowSuccess(true);
+        const newId = data.order.short_id || data.order.id;
+        setOrderId(newId);
+        setNewOrderSuccessId(newId);
         setShowCart(false);
         setCart([]);
+        setNote("");
+        await fetchTableOrders();
+        setShowTracker(true);
       } else {
-        setSubmitError("ส่งออเดอร์ไม่สำเร็จ กรุณาลองอีกครั้ง");
+        setSubmitError(data.error || "ส่งออเดอร์ไม่สำเร็จ กรุณาลองอีกครั้ง");
       }
     } catch (error) {
       console.error("Error:", error);
-      setSubmitError("เชื่อมต่อไม่ได้ ตรวจสอบอินเทอร์เน็ตแล้วลองอีกครั้ง");
+      setSubmitError("เชื่อมต่อไม่ได้ ตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง");
     } finally {
       setIsSubmitting(false);
     }
@@ -239,48 +384,6 @@ function OrderPageContent() {
 
   const discount = isMember ? Math.round(cartTotal * 0.1) : 0;
   const netTotal = isMember ? Math.round(cartTotal * 0.9) : cartTotal;
-
-  /* ---------- Success page ---------- */
-  if (showSuccess) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-app px-5 py-10">
-        <div className="w-full max-w-[400px] text-center">
-          <div
-            className={`mx-auto mb-6 flex size-16 items-center justify-center rounded-full bg-green ${ON_ORANGE}`}
-          >
-            <Icon name="check" className="size-8" />
-          </div>
-          <h1 className="mb-2 text-[1.75rem] font-extrabold text-ink">
-            ส่งออเดอร์เรียบร้อย
-          </h1>
-          <p className="mb-6 text-ink-2">
-            หมายเลขออเดอร์{" "}
-            <strong className="text-xl text-orange">#{orderId}</strong>
-          </p>
-          <p className="mb-8 text-[0.95rem] leading-[1.7] text-ink-3">
-            ครัวได้รับออเดอร์แล้ว พนักงานจะนำอาหารไปเสิร์ฟที่โต๊ะ
-          </p>
-          <div className="flex flex-col gap-3">
-            <button
-              className={`rounded-md bg-orange px-7 py-3.5 text-base font-bold transition hover:brightness-110 ${ON_ORANGE} ${FOCUS}`}
-              onClick={() => {
-                setShowSuccess(false);
-                setOrderId(null);
-              }}
-            >
-              สั่งอาหารเพิ่ม
-            </button>
-            <button
-              className={`rounded-md border border-line px-7 py-3.5 text-base font-medium text-ink-2 transition-colors hover:bg-glass hover:text-ink ${FOCUS}`}
-              onClick={() => router.push("/")}
-            >
-              กลับหน้าหลัก
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   /* ---------- Main page ---------- */
   return (
@@ -307,19 +410,55 @@ function OrderPageContent() {
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 text-sm text-ink-2">
-              <label htmlFor="table-number" className="whitespace-nowrap font-medium">
-                โต๊ะ
-              </label>
-              <input
-                id="table-number"
-                type="text"
-                placeholder="เลขโต๊ะ"
-                value={tableNumber}
-                onChange={(e) => setTableNumber(e.target.value)}
-                className="w-[76px] rounded-md border border-line bg-glass px-3 py-2 text-center text-sm text-ink placeholder:text-ink-3 focus:border-orange focus:outline-none"
-              />
-            </div>
+            {/* Table Badge / Binding */}
+            {tableNumber ? (
+              <div className="flex items-center gap-1.5 rounded-md border border-orange/40 bg-orange/10 px-3 py-1.5 text-sm font-bold text-orange">
+                <span>📍 โต๊ะ {tableNumber}</span>
+                <span className="hidden text-xs font-normal text-ink-3 sm:inline">(ประจำเครื่อง)</span>
+                <button
+                  type="button"
+                  onClick={() => setShowTableModal(true)}
+                  title="เปลี่ยนหมายเลขโต๊ะสำหรับเครื่องนี้"
+                  className="ml-1 text-xs text-ink-3 hover:text-ink"
+                >
+                  ⚙️
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowTableModal(true)}
+                className="flex items-center gap-1.5 rounded-md border border-orange bg-orange/10 px-3 py-1.5 text-sm font-semibold text-orange hover:bg-orange/20"
+              >
+                <span>📍 ตั้งค่าโต๊ะเครื่องนี้</span>
+              </button>
+            )}
+
+            {/* Status / Tracker Button */}
+            {tableNumber && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowTracker(true);
+                  fetchTableOrders();
+                }}
+                className={`flex items-center gap-2 rounded-md border border-line bg-glass px-3 py-1.5 text-sm font-semibold transition hover:border-orange hover:bg-glass-strong ${FOCUS}`}
+                title="ตรวจสอบรายการอาหารที่สั่งทั้งหมดของโต๊ะนี้"
+              >
+                <span>📋 สถานะอาหาร</span>
+                {tableUnservedCount > 0 ? (
+                  <span className="flex items-center gap-1 rounded-full bg-orange px-2 py-0.5 text-xs font-bold text-[#0a0a0f]">
+                    <span className="size-1.5 rounded-full bg-[#0a0a0f] animate-ping" />
+                    รอ {tableUnservedCount}
+                  </span>
+                ) : tableServedCount > 0 ? (
+                  <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-bold text-emerald-400">
+                    ✓ เสิร์ฟครบ
+                  </span>
+                ) : null}
+              </button>
+            )}
+
             {/* Theme toggle */}
             <button
               className={`flex size-11 items-center justify-center rounded-md border border-line text-ink transition-colors hover:bg-glass ${FOCUS}`}
@@ -405,8 +544,12 @@ function OrderPageContent() {
           })}
         </div>
 
-        {/* Menu list */}
-        {filteredItems.length === 0 ? (
+        {/* Loading Spinner for menus */}
+        {loadingMenu ? (
+          <div className="flex h-64 items-center justify-center">
+            <div className="spinner"></div>
+          </div>
+        ) : filteredItems.length === 0 ? (
           <div className="px-4 py-16 text-center md:px-6">
             <p className="mb-1 text-base font-semibold text-ink">
               ไม่พบเมนูที่ตรงกับ “{searchQuery}”
@@ -655,6 +798,402 @@ function OrderPageContent() {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Floating Order Status Bar (when items are waiting to be served) */}
+      {cartCount === 0 && tableUnservedCount > 0 && !showCart && !showTracker && (
+        <button
+          className={`fixed inset-x-4 bottom-4 z-40 mx-auto flex max-w-xl animate-pop items-center justify-between gap-4 rounded-md border border-orange/40 bg-panel px-5 py-3.5 shadow-xl transition hover:border-orange ${FOCUS}`}
+          onClick={() => {
+            setShowTracker(true);
+            fetchTableOrders();
+          }}
+        >
+          <div className="flex items-center gap-2.5">
+            <span className="flex size-2.5 rounded-full bg-orange animate-ping" />
+            <span className="text-sm font-bold text-orange">
+              มีอาหารรอเสิร์ฟ {tableUnservedCount} รายการ (โต๊ะ {tableNumber})
+            </span>
+          </div>
+          <span className="text-xs font-semibold text-ink-2 underline">
+            คลิกเพื่อดูสถานะ 📋
+          </span>
+        </button>
+      )}
+
+      {/* Modal ติดตามสถานะอาหารและสิ่งที่ยังไม่มาเสิร์ฟ */}
+      {showTracker && (
+        <div
+          className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm animate-fade-quick"
+          onClick={() => {
+            setShowTracker(false);
+            setNewOrderSuccessId(null);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-line bg-panel shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-line px-6 py-4 bg-glass">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-bold text-ink">
+                    📋 รายการอาหาร — โต๊ะ {tableNumber || "-"}
+                  </h2>
+                  <span className="rounded-full bg-orange/15 px-2.5 py-0.5 text-xs font-bold text-orange">
+                    {tableOrders.length} ออเดอร์
+                  </span>
+                </div>
+                <p className="text-xs text-ink-3">
+                  ตรวจสอบรายการที่ยังไม่มาเสิร์ฟ และรายการที่เสิร์ฟถึงโต๊ะแล้วแบบเรียลไทม์
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="flex items-center gap-1 rounded-md border border-line bg-glass px-2.5 py-1.5 text-xs font-medium text-ink-2 hover:bg-glass-strong hover:text-ink"
+                  onClick={fetchTableOrders}
+                  title="รีเฟรชสถานะล่าสุด"
+                >
+                  🔄 รีเฟรช
+                </button>
+                <button
+                  type="button"
+                  className="flex size-9 items-center justify-center rounded-md text-ink-3 hover:bg-glass hover:text-ink"
+                  onClick={() => {
+                    setShowTracker(false);
+                    setNewOrderSuccessId(null);
+                  }}
+                  aria-label="ปิดหน้าต่าง"
+                >
+                  <Icon name="close" className="size-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Alert banner if freshly submitted an order */}
+            {newOrderSuccessId && (
+              <div className="mx-6 mt-4 flex items-center justify-between rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-300">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-xl">🎉</span>
+                  <div>
+                    <strong className="text-emerald-400">
+                      ส่งออเดอร์ #{newOrderSuccessId} เรียบร้อยแล้ว!
+                    </strong>
+                    <div className="text-xs text-emerald-300/80">
+                      ครัวได้รับรายการอาหารแล้ว สามารถติดตามสถานะแต่ละจานด้านล่างนี้ได้เลย
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="text-xs text-emerald-400 underline hover:text-emerald-200"
+                  onClick={() => setNewOrderSuccessId(null)}
+                >
+                  ปิดการแจ้งเตือน
+                </button>
+              </div>
+            )}
+
+            {/* Stats Summary Bar */}
+            <div className="grid grid-cols-3 gap-3 p-6 pb-2">
+              <div
+                className={`rounded-xl border p-3 text-center transition ${
+                  tableUnservedCount > 0
+                    ? "border-orange/50 bg-orange/10"
+                    : "border-line bg-glass"
+                }`}
+              >
+                <span className="text-2xl font-extrabold text-orange">
+                  {tableUnservedCount}
+                </span>
+                <div className="text-xs font-semibold text-ink-2 mt-0.5">
+                  ⏳ ยังไม่มาเสิร์ฟ
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-line bg-glass p-3 text-center">
+                <span className="text-2xl font-extrabold text-emerald-400">
+                  {tableServedCount}
+                </span>
+                <div className="text-xs font-semibold text-ink-2 mt-0.5">
+                  ✅ เสิร์ฟแล้ว
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-line bg-glass p-3 text-center">
+                <span className="text-2xl font-extrabold text-ink">
+                  {tableTotalItemsCount}
+                </span>
+                <div className="text-xs font-semibold text-ink-2 mt-0.5">
+                  🍽️ รายการทั้งหมด
+                </div>
+              </div>
+            </div>
+
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
+              {allTableItems.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <span className="text-4xl mb-3">🍽️</span>
+                  <p className="font-semibold text-ink">
+                    ยังไม่มีรายการสั่งอาหารสำหรับโต๊ะนี้
+                  </p>
+                  <p className="text-xs text-ink-3 mt-1">
+                    กรุณาเลือกเมนูที่คุณชื่นชอบแล้วกดยืนยันสั่งอาหาร
+                  </p>
+                  <button
+                    type="button"
+                    className="mt-4 rounded-md bg-orange px-5 py-2.5 text-sm font-bold text-[#0a0a0f] hover:brightness-110"
+                    onClick={() => setShowTracker(false)}
+                  >
+                    ดูรายการเมนู
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {/* Section 1: รายการที่ยังไม่มาเสิร์ฟ */}
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-bold text-ink flex items-center gap-2">
+                        <span className="text-orange">⚠️</span>
+                        <span>รายการที่ยังไม่มาเสิร์ฟ</span>
+                        <span className="rounded-full bg-orange/20 px-2 py-0.5 text-xs font-bold text-orange">
+                          {unservedItems.length} รายการ ({tableUnservedCount} จาน)
+                        </span>
+                      </h3>
+                    </div>
+
+                    {unservedItems.length === 0 ? (
+                      <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4 text-center">
+                        <p className="text-sm font-bold text-emerald-400">
+                          🎉 อาหารทุกรายการเสิร์ฟถึงโต๊ะคุณครบแล้ว!
+                        </p>
+                        <p className="text-xs text-ink-3 mt-1">
+                          หากต้องการสั่งอะไรเพิ่มเติม สามารถกดปุ่มสั่งอาหารเพิ่มด้านล่างได้เลย
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {unservedItems.map((item, idx) => {
+                          const isReady = item.kitchen_status === "READY";
+                          const isCooking = item.kitchen_status === "COOKING";
+                          const isPending = item.kitchen_status === "PENDING";
+
+                          return (
+                            <div
+                              key={item.order_item_id || idx}
+                              className={`flex items-center justify-between gap-3 rounded-xl border p-3 transition ${
+                                isReady
+                                  ? "border-emerald-500/50 bg-emerald-500/10 shadow-sm"
+                                  : isCooking
+                                  ? "border-blue-500/30 bg-blue-500/5"
+                                  : "border-line bg-glass"
+                              }`}
+                            >
+                              <div className="flex items-center gap-3 min-w-0 flex-1">
+                                <MenuImage
+                                  src={item.image || item.image_url}
+                                  className="size-12 rounded-lg"
+                                  emojiClass="text-2xl"
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-bold text-sm text-ink truncate">
+                                      {item.name}
+                                    </span>
+                                    <span className="font-extrabold text-sm text-orange shrink-0">
+                                      x{item.quantity}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                    {item.station_code && (
+                                      <span className="rounded bg-glass px-1.5 py-0.5 text-[0.65rem] font-bold text-ink-3 uppercase border border-line">
+                                        {item.station_code}
+                                      </span>
+                                    )}
+                                    <span className="text-xs text-ink-3">
+                                      ฿{(item.price * item.quantity).toLocaleString()}
+                                    </span>
+                                    <span className="text-[0.7rem] text-ink-3">
+                                      (ออเดอร์ #{item.orderId})
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Status Badge */}
+                              <div className="shrink-0 text-right">
+                                {isReady && (
+                                  <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500 bg-emerald-500/20 px-3 py-1 text-xs font-bold text-emerald-400 animate-pulse">
+                                    <span>⭐</span>
+                                    <span>ปรุงเสร็จแล้ว กำลังนำมาเสิร์ฟ!</span>
+                                  </span>
+                                )}
+                                {isCooking && (
+                                  <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-500/40 bg-blue-500/15 px-3 py-1 text-xs font-semibold text-blue-400">
+                                    <span>🔥</span>
+                                    <span>กำลังปรุงในครัว</span>
+                                  </span>
+                                )}
+                                {isPending && (
+                                  <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/15 px-3 py-1 text-xs font-medium text-amber-400">
+                                    <span>⏳</span>
+                                    <span>รอคิวปรุง</span>
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Section 2: รายการที่เสิร์ฟถึงโต๊ะแล้ว */}
+                  {servedItems.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-bold text-ink flex items-center gap-2 mb-3">
+                        <span className="text-emerald-400">✅</span>
+                        <span>รายการที่เสิร์ฟถึงโต๊ะแล้ว</span>
+                        <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-bold text-emerald-400">
+                          {servedItems.length} รายการ ({tableServedCount} จาน)
+                        </span>
+                      </h3>
+
+                      <div className="space-y-2 opacity-80">
+                        {servedItems.map((item, idx) => (
+                          <div
+                            key={item.order_item_id || idx}
+                            className="flex items-center justify-between gap-3 rounded-xl border border-line bg-glass/60 p-3"
+                          >
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              <MenuImage
+                                src={item.image || item.image_url}
+                                className="size-10 rounded-lg grayscale-[20%]"
+                                emojiClass="text-xl"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <span className="font-semibold text-sm text-ink truncate block line-through opacity-75">
+                                  {item.name}
+                                </span>
+                                <span className="text-xs text-ink-3">
+                                  x{item.quantity} • ฿{(item.price * item.quantity).toLocaleString()}
+                                </span>
+                              </div>
+                            </div>
+                            <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-medium text-emerald-400">
+                              ✓ เสิร์ฟแล้ว
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="border-t border-line bg-glass px-6 py-4 flex items-center justify-between gap-4">
+              <div>
+                <span className="text-xs text-ink-3 block">
+                  ยอดรวมทั้งสิ้น (โต๊ะ {tableNumber})
+                </span>
+                <span className="text-lg font-extrabold text-orange">
+                  ฿{tableOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0).toLocaleString()}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="rounded-md border border-line px-4 py-2.5 text-sm font-medium text-ink-2 hover:bg-glass hover:text-ink"
+                  onClick={() => {
+                    setShowTracker(false);
+                    setNewOrderSuccessId(null);
+                  }}
+                >
+                  ปิดหน้าต่าง
+                </button>
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 rounded-md bg-orange px-5 py-2.5 text-sm font-bold text-[#0a0a0f] hover:brightness-110"
+                  onClick={() => {
+                    setShowTracker(false);
+                    setNewOrderSuccessId(null);
+                  }}
+                >
+                  <span>+ สั่งอาหารเพิ่ม</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal ตั้งค่าโต๊ะสำหรับเครื่อง POS นี้ */}
+      {showTableModal && (
+        <div
+          className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setShowTableModal(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl border border-line bg-panel p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-ink">📍 ตั้งค่าโต๊ะประจำเครื่อง POS</h3>
+              <button
+                className="text-ink-3 hover:text-ink"
+                onClick={() => setShowTableModal(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <p className="mb-4 text-xs text-ink-3">
+              เลือกว่าเครื่อง Tablet นี้ประจำอยู่ที่โต๊ะไหน ระบบจะจำค่าไว้โดยไม่ต้องกรอกซ้ำ
+            </p>
+            <div className="grid grid-cols-5 gap-2 mb-4">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                <button
+                  key={num}
+                  type="button"
+                  className={`flex h-11 items-center justify-center rounded-lg border font-bold text-sm transition ${
+                    tableNumber === String(num)
+                      ? "border-orange bg-orange text-[#0a0a0f]"
+                      : "border-line bg-glass text-ink hover:border-orange/50"
+                  }`}
+                  onClick={() => handleBindTable(String(num))}
+                >
+                  {num}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="ระบุเลขโต๊ะอื่นๆ"
+                defaultValue={tableNumber}
+                id="custom-table-input"
+                className="flex-1 rounded-md border border-line bg-glass px-3 py-2 text-sm text-ink placeholder:text-ink-3 focus:border-orange focus:outline-none"
+              />
+              <button
+                type="button"
+                className="rounded-md bg-orange px-4 py-2 text-sm font-bold text-[#0a0a0f] hover:brightness-110"
+                onClick={() => {
+                  const val = document.getElementById("custom-table-input")?.value?.trim();
+                  if (val) handleBindTable(val);
+                }}
+              >
+                บันทึก
+              </button>
+            </div>
           </div>
         </div>
       )}

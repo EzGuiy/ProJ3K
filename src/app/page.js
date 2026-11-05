@@ -50,8 +50,11 @@ export default function Home() {
           <button className={styles.staffBtn} onClick={() => router.push('/admin')}>
             <span>แอดมิน</span>
           </button>
+          <button className={styles.staffBtn} onClick={() => router.push('/chef')}>
+            <span>ห้องครัว (เชฟ)</span>
+          </button>
           <button className={styles.staffBtn} onClick={handleStaffAccess}>
-            <span>พนักงาน</span>
+            <span>พนักงานเสิร์ฟ</span>
           </button>
         </div>
       </nav>

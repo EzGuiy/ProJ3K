@@ -546,6 +546,18 @@ function MenusTab({ dbReady }) {
   const [error, setError] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [search, setSearch] = useState('');
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newMenu, setNewMenu] = useState({
+    name: '',
+    name_en: '',
+    category_id: '',
+    price: '',
+    description: '',
+    image_url: '🍽️',
+    spicy_level: 0,
+    is_popular: false,
+  });
+  const [submitting, setSubmitting] = useState(false);
 
   const fetchMenus = useCallback(async () => {
     if (!dbReady) {
@@ -562,6 +574,9 @@ function MenusTab({ dbReady }) {
       const json = await res.json();
       if (res.ok) {
         setData(json);
+        if (json.categories?.length > 0 && !newMenu.category_id) {
+          setNewMenu((prev) => ({ ...prev, category_id: json.categories[0].category_id }));
+        }
       } else {
         setError(json.error || 'เกิดข้อผิดพลาด');
       }
@@ -570,12 +585,59 @@ function MenusTab({ dbReady }) {
     } finally {
       setLoading(false);
     }
-  }, [dbReady, categoryFilter, search]);
+  }, [dbReady, categoryFilter, search, newMenu.category_id]);
 
   useEffect(() => {
     const timeout = setTimeout(fetchMenus, 300); // debounce search
     return () => clearTimeout(timeout);
   }, [fetchMenus]);
+
+  const handleToggleAvailable = async (menu_id, currentStatus) => {
+    try {
+      await fetch('/api/admin/menus', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ menu_id, is_available: !currentStatus }),
+      });
+      fetchMenus();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleCreateMenu = async (e) => {
+    e.preventDefault();
+    if (!newMenu.name || !newMenu.price || !newMenu.category_id) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/admin/menus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newMenu),
+      });
+      if (res.ok) {
+        setShowAddModal(false);
+        setNewMenu({
+          name: '',
+          name_en: '',
+          category_id: data.categories?.[0]?.category_id || '',
+          price: '',
+          description: '',
+          image_url: '🍽️',
+          spicy_level: 0,
+          is_popular: false,
+        });
+        fetchMenus();
+      } else {
+        const errJson = await res.json();
+        alert(errJson.error || 'ไม่สามารถเพิ่มเมนูได้');
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   if (!dbReady) return <EmptyDB section="จัดการเมนู" />;
   if (error) return <ErrorMessage message={error} onRetry={fetchMenus} />;
@@ -584,7 +646,16 @@ function MenusTab({ dbReady }) {
     <div className={styles.tabContent}>
       <div className={styles.tabHeader}>
         <h1 className={styles.tabTitle}>🍜 จัดการเมนูอาหาร</h1>
-        <button className={styles.refreshBtn} onClick={fetchMenus}>🔄 รีเฟรช</button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            className={styles.refreshBtn}
+            style={{ background: 'var(--accent-orange)', color: '#0a0a0f', fontWeight: 600 }}
+            onClick={() => setShowAddModal(true)}
+          >
+            ➕ เพิ่มเมนูใหม่
+          </button>
+          <button className={styles.refreshBtn} onClick={fetchMenus}>🔄 รีเฟรช</button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -618,31 +689,46 @@ function MenusTab({ dbReady }) {
           <table className={styles.dataTable}>
             <thead>
               <tr>
+                <th>ไอคอน</th>
                 <th>ชื่อเมนู</th>
                 <th>หมวดหมู่</th>
                 <th>ราคา</th>
-                <th>สถานะ</th>
+                <th>สถานะ (คลิกเพื่อเปลี่ยน)</th>
               </tr>
             </thead>
             <tbody>
               {data.menus?.length > 0 ? (
                 data.menus.map((menu) => (
                   <tr key={menu.menu_id}>
-                    <td className={styles.cellName}>{menu.name}</td>
+                    <td style={{ fontSize: '1.4rem', textAlign: 'center', width: '50px' }}>
+                      {menu.image_url || '🍽️'}
+                    </td>
+                    <td className={styles.cellName}>
+                      {menu.name}
+                      {menu.name_en && (
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{menu.name_en}</div>
+                      )}
+                    </td>
                     <td>
                       <span className={styles.categoryBadge}>{menu.category_name || '-'}</span>
                     </td>
                     <td className={styles.cellPrice}>฿{Number(menu.price || 0).toLocaleString()}</td>
                     <td>
-                      <span className={`${styles.statusBadge} ${menu.is_available ? styles.statusClosed : styles.statusOpen}`}>
-                        {menu.is_available ? '✅ เปิดขาย' : '❌ ปิดขาย'}
-                      </span>
+                      <button
+                        onClick={() => handleToggleAvailable(menu.menu_id, menu.is_available)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                        title="คลิกเพื่อสลับสถานะ"
+                      >
+                        <span className={`${styles.statusBadge} ${menu.is_available ? styles.statusClosed : styles.statusOpen}`}>
+                          {menu.is_available ? '✅ เปิดขาย' : '❌ ปิดขาย'}
+                        </span>
+                      </button>
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={4} className={styles.emptyRow}>ไม่พบรายการเมนู</td>
+                  <td colSpan={5} className={styles.emptyRow}>ไม่พบรายการเมนู</td>
                 </tr>
               )}
             </tbody>
@@ -653,6 +739,127 @@ function MenusTab({ dbReady }) {
       <p className={styles.menuCount}>
         แสดง {data.menus?.length || 0} เมนู
       </p>
+
+      {/* Modal เพิ่มเมนูใหม่ */}
+      {showAddModal && (
+        <div className={styles.modalOverlay} onClick={() => setShowAddModal(false)}>
+          <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h3>➕ เพิ่มเมนูอาหารใหม่ (บันทึกลง MySQL)</h3>
+              <button className={styles.modalClose} onClick={() => setShowAddModal(false)}>✕</button>
+            </div>
+            <form onSubmit={handleCreateMenu} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.4rem', color: 'var(--text-secondary)' }}>
+                  ชื่อเมนู (ภาษาไทย) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  className={styles.filterInput}
+                  style={{ width: '100%' }}
+                  value={newMenu.name}
+                  onChange={(e) => setNewMenu({ ...newMenu, name: e.target.value })}
+                  placeholder="เช่น ต้มยำรวมมิตร"
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.4rem', color: 'var(--text-secondary)' }}>
+                  ชื่อเมนู (English)
+                </label>
+                <input
+                  type="text"
+                  className={styles.filterInput}
+                  style={{ width: '100%' }}
+                  value={newMenu.name_en}
+                  onChange={(e) => setNewMenu({ ...newMenu, name_en: e.target.value })}
+                  placeholder="e.g. Mixed Tom Yum"
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '1rem' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.4rem', color: 'var(--text-secondary)' }}>
+                    หมวดหมู่ *
+                  </label>
+                  <select
+                    className={styles.filterSelect}
+                    style={{ width: '100%' }}
+                    value={newMenu.category_id}
+                    onChange={(e) => setNewMenu({ ...newMenu, category_id: e.target.value })}
+                  >
+                    {data.categories?.map((cat) => (
+                      <option key={cat.category_id} value={cat.category_id}>
+                        {cat.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ width: '140px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.4rem', color: 'var(--text-secondary)' }}>
+                    ราคา (บาท) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    required
+                    className={styles.filterInput}
+                    style={{ width: '100%' }}
+                    value={newMenu.price}
+                    onChange={(e) => setNewMenu({ ...newMenu, price: e.target.value })}
+                    placeholder="199"
+                  />
+                </div>
+                <div style={{ width: '100px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.4rem', color: 'var(--text-secondary)' }}>
+                    อิโมจิ
+                  </label>
+                  <input
+                    type="text"
+                    className={styles.filterInput}
+                    style={{ width: '100%', textAlign: 'center' }}
+                    value={newMenu.image_url}
+                    onChange={(e) => setNewMenu({ ...newMenu, image_url: e.target.value })}
+                    placeholder="🍜"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.4rem', color: 'var(--text-secondary)' }}>
+                  คำอธิบายเมนู
+                </label>
+                <textarea
+                  className={styles.filterInput}
+                  style={{ width: '100%', minHeight: '60px', resize: 'vertical' }}
+                  value={newMenu.description}
+                  onChange={(e) => setNewMenu({ ...newMenu, description: e.target.value })}
+                  placeholder="รายละเอียดวัตถุดิบและรสชาติ..."
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  className={styles.filterClear}
+                  onClick={() => setShowAddModal(false)}
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className={styles.refreshBtn}
+                  style={{ background: 'var(--accent-orange)', color: '#0a0a0f', fontWeight: 700 }}
+                >
+                  {submitting ? 'กำลังบันทึก...' : '💾 บันทึกเมนู'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -664,6 +871,9 @@ function MembersTab({ dbReady }) {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newMember, setNewMember] = useState({ name: '', phone_number: '', total_points: 0 });
+  const [submitting, setSubmitting] = useState(false);
 
   const fetchMembers = useCallback(async () => {
     if (!dbReady) {
@@ -695,6 +905,31 @@ function MembersTab({ dbReady }) {
     return () => clearTimeout(timeout);
   }, [fetchMembers]);
 
+  const handleCreateMember = async (e) => {
+    e.preventDefault();
+    if (!newMember.name || !newMember.phone_number) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/admin/members', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newMember),
+      });
+      if (res.ok) {
+        setShowAddModal(false);
+        setNewMember({ name: '', phone_number: '', total_points: 0 });
+        fetchMembers();
+      } else {
+        const errJson = await res.json();
+        alert(errJson.error || 'ไม่สามารถเพิ่มสมาชิกได้');
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   if (!dbReady) return <EmptyDB section="สมาชิก" />;
   if (error) return <ErrorMessage message={error} onRetry={fetchMembers} />;
 
@@ -702,7 +937,16 @@ function MembersTab({ dbReady }) {
     <div className={styles.tabContent}>
       <div className={styles.tabHeader}>
         <h1 className={styles.tabTitle}>👥 ข้อมูลสมาชิก</h1>
-        <button className={styles.refreshBtn} onClick={fetchMembers}>🔄 รีเฟรช</button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            className={styles.refreshBtn}
+            style={{ background: 'var(--accent-orange)', color: '#0a0a0f', fontWeight: 600 }}
+            onClick={() => setShowAddModal(true)}
+          >
+            ➕ เพิ่มสมาชิกใหม่
+          </button>
+          <button className={styles.refreshBtn} onClick={fetchMembers}>🔄 รีเฟรช</button>
+        </div>
       </div>
 
       <div className={styles.filterBar}>
@@ -773,6 +1017,81 @@ function MembersTab({ dbReady }) {
           )}
         </>
       )}
+
+      {/* Modal เพิ่มสมาชิกใหม่ */}
+      {showAddModal && (
+        <div className={styles.modalOverlay} onClick={() => setShowAddModal(false)}>
+          <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h3>➕ เพิ่มสมาชิกใหม่ (บันทึกลง MySQL)</h3>
+              <button className={styles.modalClose} onClick={() => setShowAddModal(false)}>✕</button>
+            </div>
+            <form onSubmit={handleCreateMember} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.4rem', color: 'var(--text-secondary)' }}>
+                  ชื่อ - นามสกุล *
+                </label>
+                <input
+                  type="text"
+                  required
+                  className={styles.filterInput}
+                  style={{ width: '100%' }}
+                  value={newMember.name}
+                  onChange={(e) => setNewMember({ ...newMember, name: e.target.value })}
+                  placeholder="เช่น สมชาย ใจดี"
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.4rem', color: 'var(--text-secondary)' }}>
+                  เบอร์โทรศัพท์ (ใช้สะสมแต้ม) *
+                </label>
+                <input
+                  type="tel"
+                  required
+                  className={styles.filterInput}
+                  style={{ width: '100%' }}
+                  value={newMember.phone_number}
+                  onChange={(e) => setNewMember({ ...newMember, phone_number: e.target.value })}
+                  placeholder="0812345678"
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.4rem', color: 'var(--text-secondary)' }}>
+                  แต้มเริ่มต้น
+                </label>
+                <input
+                  type="number"
+                  className={styles.filterInput}
+                  style={{ width: '100%' }}
+                  value={newMember.total_points}
+                  onChange={(e) => setNewMember({ ...newMember, total_points: e.target.value })}
+                  placeholder="0"
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  className={styles.filterClear}
+                  onClick={() => setShowAddModal(false)}
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className={styles.refreshBtn}
+                  style={{ background: 'var(--accent-orange)', color: '#0a0a0f', fontWeight: 700 }}
+                >
+                  {submitting ? 'กำลังบันทึก...' : '💾 บันทึกสมาชิก'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -784,6 +1103,9 @@ function StaffTab({ dbReady }) {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newStaff, setNewStaff] = useState({ name: '', role: 'SERVER', pin_code: '0000' });
+  const [submitting, setSubmitting] = useState(false);
 
   const fetchStaff = useCallback(async () => {
     if (!dbReady) {
@@ -815,6 +1137,31 @@ function StaffTab({ dbReady }) {
     return () => clearTimeout(timeout);
   }, [fetchStaff]);
 
+  const handleCreateStaff = async (e) => {
+    e.preventDefault();
+    if (!newStaff.name || !newStaff.role) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/admin/staff', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newStaff),
+      });
+      if (res.ok) {
+        setShowAddModal(false);
+        setNewStaff({ name: '', role: 'SERVER', pin_code: '0000' });
+        fetchStaff();
+      } else {
+        const errJson = await res.json();
+        alert(errJson.error || 'ไม่สามารถเพิ่มพนักงานได้');
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   if (!dbReady) return <EmptyDB section="พนักงาน" />;
   if (error) return <ErrorMessage message={error} onRetry={fetchStaff} />;
 
@@ -829,7 +1176,16 @@ function StaffTab({ dbReady }) {
     <div className={styles.tabContent}>
       <div className={styles.tabHeader}>
         <h1 className={styles.tabTitle}>👨‍💼 ข้อมูลพนักงาน</h1>
-        <button className={styles.refreshBtn} onClick={fetchStaff}>🔄 รีเฟรช</button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            className={styles.refreshBtn}
+            style={{ background: 'var(--accent-orange)', color: '#0a0a0f', fontWeight: 600 }}
+            onClick={() => setShowAddModal(true)}
+          >
+            ➕ เพิ่มพนักงาน
+          </button>
+          <button className={styles.refreshBtn} onClick={fetchStaff}>🔄 รีเฟรช</button>
+        </div>
       </div>
 
       <div className={styles.filterBar}>
@@ -903,6 +1259,86 @@ function StaffTab({ dbReady }) {
       <p className={styles.menuCount}>
         แสดง {staff.length} คน
       </p>
+
+      {/* Modal เพิ่มพนักงานใหม่ */}
+      {showAddModal && (
+        <div className={styles.modalOverlay} onClick={() => setShowAddModal(false)}>
+          <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h3>➕ เพิ่มพนักงานใหม่ (บันทึกลง MySQL)</h3>
+              <button className={styles.modalClose} onClick={() => setShowAddModal(false)}>✕</button>
+            </div>
+            <form onSubmit={handleCreateStaff} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.4rem', color: 'var(--text-secondary)' }}>
+                  ชื่อพนักงาน *
+                </label>
+                <input
+                  type="text"
+                  required
+                  className={styles.filterInput}
+                  style={{ width: '100%' }}
+                  value={newStaff.name}
+                  onChange={(e) => setNewStaff({ ...newStaff, name: e.target.value })}
+                  placeholder="เช่น สมชาย ใจดี"
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '1rem' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.4rem', color: 'var(--text-secondary)' }}>
+                    ตำแหน่ง *
+                  </label>
+                  <select
+                    className={styles.filterSelect}
+                    style={{ width: '100%' }}
+                    value={newStaff.role}
+                    onChange={(e) => setNewStaff({ ...newStaff, role: e.target.value })}
+                  >
+                    <option value="SERVER">พนักงานเสิร์ฟ (SERVER)</option>
+                    <option value="CHEF">พ่อครัว (CHEF)</option>
+                    <option value="EXPO">จัดจาน (EXPO)</option>
+                    <option value="ADMIN">ผู้ดูแลระบบ (ADMIN)</option>
+                  </select>
+                </div>
+
+                <div style={{ width: '140px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.4rem', color: 'var(--text-secondary)' }}>
+                    PIN Code (4 หลัก)
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={10}
+                    className={styles.filterInput}
+                    style={{ width: '100%' }}
+                    value={newStaff.pin_code}
+                    onChange={(e) => setNewStaff({ ...newStaff, pin_code: e.target.value })}
+                    placeholder="1234"
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  className={styles.filterClear}
+                  onClick={() => setShowAddModal(false)}
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className={styles.refreshBtn}
+                  style={{ background: 'var(--accent-orange)', color: '#0a0a0f', fontWeight: 700 }}
+                >
+                  {submitting ? 'กำลังบันทึก...' : '💾 บันทึกพนักงาน'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -912,6 +1348,9 @@ function TablesTab({ dbReady }) {
   const [tables, setTables] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newTableNumber, setNewTableNumber] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const fetchTables = useCallback(async () => {
     if (!dbReady) {
@@ -937,6 +1376,31 @@ function TablesTab({ dbReady }) {
     fetchTables();
   }, [fetchTables]);
 
+  const handleCreateTable = async (e) => {
+    e.preventDefault();
+    if (!newTableNumber.trim()) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/admin/tables', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ table_number: newTableNumber.trim() }),
+      });
+      if (res.ok) {
+        setShowAddModal(false);
+        setNewTableNumber('');
+        fetchTables();
+      } else {
+        const errJson = await res.json();
+        alert(errJson.error || 'ไม่สามารถเพิ่มโต๊ะได้');
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   if (!dbReady) return <EmptyDB section="โต๊ะอาหาร" />;
   if (loading) return <LoadingSpinner />;
   if (error) return <ErrorMessage message={error} onRetry={fetchTables} />;
@@ -948,7 +1412,16 @@ function TablesTab({ dbReady }) {
     <div className={styles.tabContent}>
       <div className={styles.tabHeader}>
         <h1 className={styles.tabTitle}>🪑 สถานะโต๊ะอาหาร</h1>
-        <button className={styles.refreshBtn} onClick={fetchTables}>🔄 รีเฟรช</button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            className={styles.refreshBtn}
+            style={{ background: 'var(--accent-orange)', color: '#0a0a0f', fontWeight: 600 }}
+            onClick={() => setShowAddModal(true)}
+          >
+            ➕ เพิ่มโต๊ะอาหาร
+          </button>
+          <button className={styles.refreshBtn} onClick={fetchTables}>🔄 รีเฟรช</button>
+        </div>
       </div>
 
       <div className={styles.tableStatsBar}>
@@ -985,6 +1458,52 @@ function TablesTab({ dbReady }) {
           <p className={styles.emptyText}>ยังไม่มีข้อมูลโต๊ะในฐานข้อมูล</p>
         )}
       </div>
+
+      {/* Modal เพิ่มโต๊ะใหม่ */}
+      {showAddModal && (
+        <div className={styles.modalOverlay} onClick={() => setShowAddModal(false)}>
+          <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h3>➕ เพิ่มโต๊ะอาหารใหม่ (บันทึกลง MySQL)</h3>
+              <button className={styles.modalClose} onClick={() => setShowAddModal(false)}>✕</button>
+            </div>
+            <form onSubmit={handleCreateTable} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.4rem', color: 'var(--text-secondary)' }}>
+                  หมายเลขหรือชื่อโต๊ะ *
+                </label>
+                <input
+                  type="text"
+                  required
+                  className={styles.filterInput}
+                  style={{ width: '100%' }}
+                  value={newTableNumber}
+                  onChange={(e) => setNewTableNumber(e.target.value)}
+                  placeholder="เช่น 11 หรือ VIP-1"
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  className={styles.filterClear}
+                  onClick={() => setShowAddModal(false)}
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className={styles.refreshBtn}
+                  style={{ background: 'var(--accent-orange)', color: '#0a0a0f', fontWeight: 700 }}
+                >
+                  {submitting ? 'กำลังบันทึก...' : '💾 บันทึกโต๊ะ'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
