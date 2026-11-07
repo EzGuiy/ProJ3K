@@ -46,9 +46,17 @@ export default function Home() {
           <span className={styles.navLogo}></span>
           <span className={styles.navTitle}>ครัวสุดโหด</span>
         </div>
-        <button className={styles.staffBtn} onClick={handleStaffAccess}>
-          <span>พนักงาน</span>
-        </button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button className={styles.staffBtn} onClick={() => router.push('/admin')}>
+            <span>แอดมิน</span>
+          </button>
+          <button className={styles.staffBtn} onClick={() => router.push('/chef')}>
+            <span>ห้องครัว (เชฟ)</span>
+          </button>
+          <button className={styles.staffBtn} onClick={handleStaffAccess}>
+            <span>พนักงานเสิร์ฟ</span>
+          </button>
+        </div>
       </nav>
 
       {/* Hero Section */}
