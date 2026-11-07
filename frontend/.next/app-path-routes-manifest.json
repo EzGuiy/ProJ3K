@@ -1,0 +1,17 @@
+{
+  "/_global-error/page": "/_global-error",
+  "/_not-found/page": "/_not-found",
+  "/admin/menu/page": "/admin/menu",
+  "/admin/orders/page": "/admin/orders",
+  "/admin/page": "/admin",
+  "/admin/userEdit/page": "/admin/userEdit",
+  "/api/chef/[id]/route": "/api/chef/[id]",
+  "/api/chef/route": "/api/chef",
+  "/api/orders/[id]/route": "/api/orders/[id]",
+  "/api/orders/route": "/api/orders",
+  "/chef/page": "/chef",
+  "/favicon.ico/route": "/favicon.ico",
+  "/order/page": "/order",
+  "/page": "/",
+  "/staff/page": "/staff"
+}
