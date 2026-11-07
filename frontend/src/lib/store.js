@@ -32,3 +32,12 @@ export function updateOrderStatus(orderId, status) {
 export function getOrderById(orderId) {
   return orders.find(o => o.id === orderId) || null;
 }
+
+export function updateOrderFields(orderId, fields) {
+  const order = orders.find(o => o.id === orderId);
+  if (order) {
+    Object.assign(order, fields, { updatedAt: new Date().toISOString() });
+    return order;
+  }
+  return null;
+}

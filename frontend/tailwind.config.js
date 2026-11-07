@@ -8,6 +8,19 @@ module.exports = {
   theme: {
     extend: {
       colors: {
+        app: "var(--bg-primary)",
+        panel: "var(--bg-secondary)",
+        glass: "var(--bg-glass)",
+        line: "var(--border-subtle)",
+        ink: "var(--text-primary)",
+        "ink-2": "var(--text-secondary)",
+        "ink-3": "var(--text-muted)",
+        orange: "var(--accent-orange)",
+        amber: "var(--accent-amber)",
+        green: "var(--accent-green)",
+        red: "var(--accent-red)",
+        blue: "var(--accent-blue)",
+        purple: "var(--accent-purple)",
         "bg-primary": "#0a0a0f",
         "bg-secondary": "#12121a",
         "accent-orange": "#ff6b35",
@@ -42,9 +55,15 @@ module.exports = {
           from: { opacity: "0", transform: "translateY(10px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
+        slideInRight: {
+          from: { opacity: "0", transform: "translateX(30px)" },
+          to: { opacity: "1", transform: "translateX(0)" },
+        },
       },
       animation: {
         "fade-in": "fadeIn 0.5s ease forwards",
+        "fade-quick": "fadeIn 0.2s ease",
+        drawer: "slideInRight 0.3s ease",
       },
     },
   },
