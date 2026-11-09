@@ -19,23 +19,16 @@ export default function AdminPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [dbStatus, setDbStatus] = useState(null); // null = loading, true = ok, false = error
-  const [dbError, setDbError] = useState('');
 
   // ตรวจสอบการเชื่อมต่อ DB ตอนเปิดหน้า
   useEffect(() => {
     fetch('/api/db-test')
       .then((res) => res.json())
       .then((data) => {
-        if (data.status === 'success') {
-          setDbStatus(true);
-        } else {
-          setDbStatus(false);
-          setDbError(data.hint || data.error_message || 'ไม่สามารถเชื่อมต่อฐานข้อมูลได้');
-        }
+        setDbStatus(data.status === 'success');
       })
       .catch(() => {
         setDbStatus(false);
-        setDbError('ไม่สามารถเชื่อมต่อ API ได้');
       });
   }, []);
 
@@ -64,45 +57,10 @@ export default function AdminPage() {
           ))}
         </nav>
 
-        {/* DB Status Indicator */}
-        <div className={styles.sidebarFooter}>
-          <div
-            className={`${styles.dbStatus} ${
-              dbStatus === null
-                ? styles.dbStatusLoading
-                : dbStatus
-                ? styles.dbStatusOk
-                : styles.dbStatusError
-            }`}
-          >
-            <span className={styles.dbDot}></span>
-            <span>
-              {dbStatus === null
-                ? 'กำลังตรวจสอบ DB...'
-                : dbStatus
-                ? 'MySQL เชื่อมต่อสำเร็จ'
-                : 'DB ไม่ได้เชื่อมต่อ'}
-            </span>
-          </div>
-        </div>
       </aside>
 
       {/* Main Content */}
       <main className={styles.main}>
-        {/* DB Error Banner */}
-        {dbStatus === false && (
-          <div className={styles.errorBanner}>
-            <span>⚠️</span>
-            <div>
-              <strong>ไม่สามารถเชื่อมต่อฐานข้อมูล MySQL ได้</strong>
-              <p>{dbError}</p>
-              <p className={styles.errorHint}>
-                กรุณาตรวจสอบไฟล์ <code>.env.local</code> และตรวจสอบว่า MySQL กำลังทำงานอยู่
-              </p>
-            </div>
-          </div>
-        )}
-
         {activeTab === 'dashboard' && <DashboardTab dbReady={dbStatus === true} />}
         {activeTab === 'orders' && <OrdersTab dbReady={dbStatus === true} />}
         {activeTab === 'menus' && <MenusTab dbReady={dbStatus === true} />}
@@ -1565,15 +1523,8 @@ function EmptyDB({ section }) {
   return (
     <div className={styles.emptyDB}>
       <span className={styles.emptyDBIcon}>🗄️</span>
-      <h3>ยังไม่ได้เชื่อมต่อฐานข้อมูล</h3>
-      <p>
-        ส่วน <strong>{section}</strong> ต้องเชื่อมต่อ MySQL ก่อนจึงจะแสดงข้อมูลได้
-      </p>
-      <div className={styles.emptyDBSteps}>
-        <p>1. ตรวจสอบไฟล์ <code>.env.local</code> ว่ามีข้อมูลเชื่อมต่อ MySQL ครบถ้วน</p>
-        <p>2. ตรวจสอบว่า MySQL Service กำลังทำงาน (เช่น XAMPP, Docker)</p>
-        <p>3. ทดสอบที่ <a href="/api/db-test" target="_blank" rel="noopener noreferrer">/api/db-test</a></p>
-      </div>
+      <h3>ยังไม่มีข้อมูล</h3>
+      <p>ส่วน <strong>{section}</strong> ยังไม่มีข้อมูลให้แสดง</p>
     </div>
   );
 }
