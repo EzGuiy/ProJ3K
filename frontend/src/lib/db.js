@@ -1,9 +1,10 @@
 import mysql from 'mysql2/promise';
 
-const globalForMySQL = globalThis;
+// ป้องกัน connection leak ในระหว่างพัฒนาเมื่อ Next.js ทำ Hot Reload
+let pool;
 
-if (!globalForMySQL.mysqlPool) {
-  globalForMySQL.mysqlPool = mysql.createPool({
+if (!global._mysqlPool) {
+  global._mysqlPool = mysql.createPool({
     host: process.env.DB_HOST || 'localhost',
     port: Number(process.env.DB_PORT) || 3306,
     user: process.env.DB_USER || 'root',
@@ -17,4 +18,7 @@ if (!globalForMySQL.mysqlPool) {
   });
 }
 
-export default globalForMySQL.mysqlPool;
+pool = global._mysqlPool;
+
+export default pool;
+
