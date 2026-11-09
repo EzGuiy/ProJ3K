@@ -17,6 +17,7 @@ import {
   MdCircle,
   MdLocalFireDepartment,
   MdStorefront,
+  MdTableRestaurant,
 } from "react-icons/md";
 
 export default function AdminLayout({ children }) {
@@ -30,7 +31,7 @@ export default function AdminLayout({ children }) {
     { href: "/admin/menu", label: "จัดการเมนูอาหาร", Icon: MdRestaurantMenu },
     { href: "/admin/orders", label: "คำสั่งซื้อล่าสุด", Icon: MdReceiptLong, },
     { href: "/admin/userEdit", label: "จัดการพนักงาน", Icon: MdPeople },
-    { href: "/admin/reports", label: "รายงานยอดขาย", Icon: MdBarChart },
+    { href: "/admin/set_table", label: "จัดการโต๊ะ", Icon: MdTableRestaurant },
     { href: "/admin/settings", label: "ตั้งค่าระบบ", Icon: MdSettings },
   ];
 
@@ -46,6 +47,7 @@ export default function AdminLayout({ children }) {
       case "/admin/menu": return { title: "จัดการเมนูอาหาร", subtitle: "Menu Management" };
       case "/admin/orders": return { title: "คำสั่งซื้อ", subtitle: "Orders" };
       case "/admin/userEdit": return { title: "จัดการพนักงาน", subtitle: "Staff Management" };
+      case "/admin/set_table": return { title: "จัดการโต๊ะ", subtitle: "Table Management" };
       case "/admin/reports": return { title: "รายงานยอดขาย", subtitle: "Reports" };
       case "/admin/settings": return { title: "ตั้งค่าระบบ", subtitle: "Settings" };
       default: return { title: "Admin", subtitle: "ครัวสุดโหด" };

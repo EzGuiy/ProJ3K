@@ -10,13 +10,29 @@ import {
   MdArrowForward,
   MdRestaurantMenu,
   MdInventory2,
+  MdTableRestaurant,
 } from "react-icons/md";
 import { getAdminStats, getAdminOrders } from "@/lib/api";
+import { getStatusMeta } from "@/lib/tableStatus";
 
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState(null);
   const [recentOrders, setRecentOrders] = useState([]);
+  const [tables, setTables] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/admin/tables", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : { tables: [] }))
+      .then((data) => {
+        if (active) setTables(data.tables || []);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     async function loadAdminData() {
@@ -66,6 +82,13 @@ export default function AdminDashboardPage() {
     },
   ];
 
+  const tableCounts = {
+    ALL: tables.length,
+    AVAILABLE: tables.filter((t) => t.status === "AVAILABLE").length,
+    RESERVED: tables.filter((t) => t.status === "RESERVED").length,
+    OCCUPIED: tables.filter((t) => t.status === "OCCUPIED").length,
+  };
+
   return (
     <div className="flex flex-col gap-5">
 
@@ -92,6 +115,53 @@ export default function AdminDashboardPage() {
                 <p className="text-[0.7rem] text-[#5f6368] mt-2">{sub}</p>
               </div>
             ))}
+          </div>
+
+          {/* Table status */}
+          <div className="bg-[#1c1c1e] border border-white/[0.08] rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.08] gap-3 flex-wrap">
+              <div>
+                <h2 className="text-[0.9rem] font-semibold text-[#e8eaed]">สถานะโต๊ะอาหาร</h2>
+                <p className="text-[0.72rem] text-[#5f6368] mt-0.5">
+                  ทั้งหมด {tableCounts.ALL} โต๊ะ · ว่าง {tableCounts.AVAILABLE} · จอง {tableCounts.RESERVED} · เต็ม {tableCounts.OCCUPIED}
+                </p>
+              </div>
+              <Link
+                href="/admin/set_table"
+                className="flex items-center gap-1 text-[0.78rem] text-[#ff6b35] hover:underline no-underline"
+              >
+                จัดการโต๊ะ <MdArrowForward className="text-sm" />
+              </Link>
+            </div>
+
+            <div className="p-5">
+              {tables.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 text-[#5f6368] gap-2">
+                  <MdTableRestaurant className="text-3xl" />
+                  <p className="text-[0.85rem]">ยังไม่มีข้อมูลโต๊ะ</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-2.5">
+                  {tables.map((table) => {
+                    const meta = getStatusMeta(table.status);
+                    return (
+                      <div
+                        key={table.table_id}
+                        className={`rounded-lg border px-3 py-2.5 ${meta.bg} ${meta.border}`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[0.92rem] font-semibold text-[#e8eaed] truncate">
+                            โต๊ะ {table.table_number}
+                          </span>
+                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${meta.dot}`} />
+                        </div>
+                        <p className={`text-[0.72rem] font-medium mt-0.5 ${meta.text}`}>{meta.label}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Quick actions */}
