@@ -1,5 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Noto+Sans+Thai:wght@300;400;500;600;700;800&display=swap');
-@import "tailwindcss";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 /* ===== Design Tokens (เหมือนเดิมทุกค่า) ===== */
 :root {
@@ -84,48 +87,21 @@ html.light {
   --gradient-card: linear-gradient(145deg, rgba(0,0,0,0.02), rgba(0,0,0,0.01));
 }
 
-/* ===== Tailwind theme: อ้างอิงตัวแปรด้านบน ไม่ต้องแก้สองที่ ===== */
-@theme inline {
-  --color-app: var(--bg-primary);
-  --color-panel: var(--bg-secondary);
-  --color-glass: var(--bg-glass);
-  --color-glass-strong: var(--bg-glass-strong);
-  --color-line: var(--border-subtle);
-  --color-line-light: var(--border-light);
-  --color-ink: var(--text-primary);
-  --color-ink-2: var(--text-secondary);
-  --color-ink-3: var(--text-muted);
-  --color-orange: var(--accent-orange);
-  --color-amber: var(--accent-amber);
-  --color-green: var(--accent-green);
-  --color-red: var(--accent-red);
-  --color-blue: var(--accent-blue);
-  --color-purple: var(--accent-purple);
-}
-
-/* ชื่อ animation ของ Tailwind ใช้ keyframes ที่ประกาศไว้ด้านล่าง
-   (ตั้งชื่อไม่ซ้ำกับคลาส .animate-fade-in ฯลฯ เดิม เพื่อไม่ให้ชนกัน) */
-@theme {
-  --animate-drop-in: slideDown 0.4s ease;
-  --animate-card-in: fadeIn 0.4s ease both;
-  --animate-fade-quick: fadeIn 0.2s ease;
-  --animate-rise: fadeInUp 0.4s ease;
-  --animate-drawer: slideInRight 0.3s ease;
-  --animate-pop: bounceIn 0.3s ease;
-  --animate-pop-slow: bounceIn 0.6s ease;
-  --animate-zoom-in: scaleIn 0.5s ease;
-}
+/* ===== Tailwind theme: สี/animation ประกาศใน tailwind.config.js =====
+   (โปรเจกต์นี้ใช้ Tailwind v3 จึงไม่มี @theme แบบ v4) */
 
 /* ===== Utilities ที่ใช้ซ้ำ ===== */
-@utility bg-gradient-primary {
-  background: var(--gradient-primary);
-}
-@utility bg-gradient-card {
-  background: var(--gradient-card);
-}
-@utility no-scrollbar {
-  scrollbar-width: none;
-  &::-webkit-scrollbar {
+@layer utilities {
+  .bg-gradient-primary {
+    background: var(--gradient-primary);
+  }
+  .bg-gradient-card {
+    background: var(--gradient-card);
+  }
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
 }
