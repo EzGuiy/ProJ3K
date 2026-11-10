@@ -14,16 +14,35 @@ const SEED = [
   ["8", "OCCUPIED"],
 ];
 
+function seedOpenedAt(status, index) {
+  if (status !== "OCCUPIED") return null;
+  // เวลาตัวอย่างเพื่อให้เห็นการจับเวลา (จะคงที่ตราบเท่าที่เซิร์ฟเวอร์ไม่รีสตาร์ท)
+  const minutesAgo = [18, 47, 95][index % 3];
+  return new Date(Date.now() - minutesAgo * 60 * 1000).toISOString();
+}
+
 if (!g.__posTableStore) {
-  g.__posTableStore = SEED.map(([number, status], index) => ({
-    table_id: `tbl_mem_${index + 1}`,
-    table_number: number,
-    status,
-    current_order_id: null,
-    current_order_total: null,
-    order_opened_at: null,
-    item_count: 0,
-  }));
+  let occ = 0;
+  g.__posTableStore = SEED.map(([number, status], index) => {
+    const openedAt = seedOpenedAt(status, occ);
+    if (status === "OCCUPIED") occ += 1;
+    return {
+      table_id: `tbl_mem_${index + 1}`,
+      table_number: number,
+      status,
+      current_order_id: null,
+      current_order_total: null,
+      order_opened_at: openedAt,
+      item_count: 0,
+    };
+  });
+} else {
+  // เติมเวลาให้โต๊ะที่กำลัง "เต็ม" แต่ยังไม่มีเวลาเริ่ม (กรณี hot-reload/โค้ดเวอร์ชันเก่า)
+  g.__posTableStore.forEach((table) => {
+    if (table?.status === "OCCUPIED" && !table.order_opened_at) {
+      table.order_opened_at = new Date().toISOString();
+    }
+  });
 }
 
 function store() {
@@ -66,7 +85,15 @@ export function updateTable(tableId, patch = {}) {
   const table = store().find((t) => t.table_id === tableId);
   if (!table) return { error: "ไม่พบโต๊ะ" };
 
-  if (patch.status) table.status = patch.status;
+  if (patch.status) {
+    table.status = patch.status;
+    // จับเวลาอัตโนมัติเมื่อกดปุ่ม "เต็ม" (OCCUPIED) และล้างเวลาเมื่อเปลี่ยนสถานะอื่น
+    if (patch.status === "OCCUPIED") {
+      table.order_opened_at = new Date().toISOString();
+    } else {
+      table.order_opened_at = null;
+    }
+  }
 
   if (patch.table_number) {
     const number = String(patch.table_number).trim();

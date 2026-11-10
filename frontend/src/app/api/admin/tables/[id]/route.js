@@ -62,7 +62,15 @@ export async function PATCH(request, { params }) {
       return NextResponse.json({ error: 'ไม่พบโต๊ะ' }, { status: 404 });
     }
 
-    return NextResponse.json({ message: 'อัปเดตโต๊ะสำเร็จ', offline: false });
+    const order_opened_at =
+      patch.status === 'OCCUPIED' ? new Date().toISOString() : patch.status ? null : undefined;
+
+    return NextResponse.json({
+      message: 'อัปเดตโต๊ะสำเร็จ',
+      offline: false,
+      ...(patch.status ? { status: patch.status, order_opened_at } : {}),
+      ...(patch.table_number ? { table_number: patch.table_number } : {}),
+    });
   } catch (error) {
     if (error?.code === 'ER_DUP_ENTRY') {
       return NextResponse.json({ error: 'หมายเลขโต๊ะนี้ถูกใช้แล้ว' }, { status: 409 });
@@ -72,7 +80,12 @@ export async function PATCH(request, { params }) {
       if (result.error) {
         return NextResponse.json({ error: result.error }, { status: 404 });
       }
-      return NextResponse.json({ message: 'อัปเดตโต๊ะสำเร็จ', offline: true });
+      return NextResponse.json({
+        message: 'อัปเดตโต๊ะสำเร็จ',
+        offline: true,
+        table: result.table,
+        ...(result.table?.status ? { status: result.table.status, order_opened_at: result.table.order_opened_at ?? null } : {}),
+      });
     }
     console.error('Update table error:', error);
     return NextResponse.json({ error: error.message, code: error.code }, { status: 500 });

@@ -31,3 +31,22 @@ export const TABLE_STATUS_META = {
 export function getStatusMeta(status) {
   return TABLE_STATUS_META[status] || TABLE_STATUS_META.AVAILABLE;
 }
+
+export function formatClockTime(isoString) {
+  if (!isoString) return "";
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
+}
+
+export function formatElapsed(isoString, nowMs = Date.now()) {
+  if (!isoString) return "";
+  const start = new Date(isoString).getTime();
+  if (Number.isNaN(start)) return "";
+  const diff = Math.max(0, nowMs - start);
+  const totalMinutes = Math.floor(diff / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours > 0) return `${hours} ชม. ${minutes} นาที`;
+  return `${minutes} นาที`;
+}

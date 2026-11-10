@@ -11,15 +11,22 @@ import {
   MdRestaurantMenu,
   MdInventory2,
   MdTableRestaurant,
+  MdSchedule,
 } from "react-icons/md";
 import { getAdminStats, getAdminOrders } from "@/lib/api";
-import { getStatusMeta } from "@/lib/tableStatus";
+import { getStatusMeta, formatClockTime, formatElapsed } from "@/lib/tableStatus";
 
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState(null);
   const [recentOrders, setRecentOrders] = useState([]);
   const [tables, setTables] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -117,22 +124,35 @@ export default function AdminDashboardPage() {
             ))}
           </div>
 
-          {/* Table status */}
-          <div className="bg-[#1c1c1e] border border-white/[0.08] rounded-xl overflow-hidden">
+          {/* Table status — redesigned + live time */}
+          <div className="bg-[#1c1c1e] border border-white/[0.08] rounded-2xl overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.08] gap-3 flex-wrap">
-              <div>
+              <div className="min-w-0">
                 <h2 className="text-[0.9rem] font-semibold text-[#e8eaed]">สถานะโต๊ะอาหาร</h2>
-                <p className="text-[0.72rem] text-[#5f6368] mt-0.5">
-                  ทั้งหมด {tableCounts.ALL} โต๊ะ · ว่าง {tableCounts.AVAILABLE} · จอง {tableCounts.RESERVED} · เต็ม {tableCounts.OCCUPIED}
-                </p>
+                <div className="flex items-center gap-3 text-[0.72rem] mt-1 flex-wrap">
+                  <span className="text-[#9aa0a6]">ทั้งหมด <span className="text-[#e8eaed] font-semibold tabular-nums">{tableCounts.ALL}</span></span>
+                  <span className="flex items-center gap-1.5 text-[#81c995]"><span className="w-1.5 h-1.5 rounded-full bg-[#34a853]" />ว่าง {tableCounts.AVAILABLE}</span>
+                  <span className="flex items-center gap-1.5 text-[#fdd663]"><span className="w-1.5 h-1.5 rounded-full bg-[#fbbc04]" />จอง {tableCounts.RESERVED}</span>
+                  <span className="flex items-center gap-1.5 text-[#f28b82]"><span className="w-1.5 h-1.5 rounded-full bg-[#ea4335]" />เต็ม {tableCounts.OCCUPIED}</span>
+                </div>
               </div>
               <Link
                 href="/admin/set_table"
-                className="flex items-center gap-1 text-[0.78rem] text-[#ff6b35] hover:underline no-underline"
+                className="flex items-center gap-1 text-[0.78rem] text-[#ff6b35] hover:underline no-underline shrink-0"
               >
                 จัดการโต๊ะ <MdArrowForward className="text-sm" />
               </Link>
             </div>
+
+            {tableCounts.ALL > 0 ? (
+              <div className="px-5 pt-4">
+                <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden flex">
+                  <div className="bg-[#34a853] transition-all duration-500" style={{ width: `${(tableCounts.AVAILABLE / tableCounts.ALL) * 100}%` }} />
+                  <div className="bg-[#fbbc04] transition-all duration-500" style={{ width: `${(tableCounts.RESERVED / tableCounts.ALL) * 100}%` }} />
+                  <div className="bg-[#ea4335] transition-all duration-500" style={{ width: `${(tableCounts.OCCUPIED / tableCounts.ALL) * 100}%` }} />
+                </div>
+              </div>
+            ) : null}
 
             <div className="p-5">
               {tables.length === 0 ? (
@@ -141,21 +161,38 @@ export default function AdminDashboardPage() {
                   <p className="text-[0.85rem]">ยังไม่มีข้อมูลโต๊ะ</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-2.5">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-4 gap-3">
                   {tables.map((table) => {
                     const meta = getStatusMeta(table.status);
+                    const isOccupied = table.status === "OCCUPIED";
+                    const elapsed = isOccupied ? formatElapsed(table.order_opened_at, now) : "";
+                    const clock = formatClockTime(table.order_opened_at);
                     return (
                       <div
                         key={table.table_id}
-                        className={`rounded-lg border px-3 py-2.5 ${meta.bg} ${meta.border}`}
+                        className={`relative rounded-xl border p-3 pl-3.5 transition-colors ${meta.bg} ${meta.border} ${isOccupied ? "shadow-[0_0_0_1px_rgba(234,67,53,0.05)]" : ""}`}
                       >
+                        <div className={`absolute left-0 top-3 bottom-3 w-[3px] rounded-r-full ${meta.dot}`} />
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-[0.92rem] font-semibold text-[#e8eaed] truncate">
+                          <span className="text-[0.95rem] font-semibold text-[#e8eaed] truncate">
                             โต๊ะ {table.table_number}
                           </span>
-                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${meta.dot}`} />
+                          <span className={`inline-flex items-center gap-1 text-[0.68rem] font-semibold ${meta.text}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${meta.dot} ${isOccupied ? "animate-pulse" : ""}`} />
+                            {meta.label}
+                          </span>
                         </div>
-                        <p className={`text-[0.72rem] font-medium mt-0.5 ${meta.text}`}>{meta.label}</p>
+                        <div className={`mt-2 flex items-center gap-1.5 text-[0.72rem] ${isOccupied && elapsed ? meta.text : "text-[#5f6368]"}`}>
+                          <MdSchedule className="text-[0.85rem] shrink-0" />
+                          {isOccupied && elapsed ? (
+                            <span className="tabular-nums truncate">
+                              <span className="font-semibold">{elapsed}</span>
+                              {clock ? <span className="opacity-75"> · {clock} น.</span> : null}
+                            </span>
+                          ) : (
+                            <span>เวลา —</span>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
