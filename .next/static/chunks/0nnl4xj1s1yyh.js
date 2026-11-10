@@ -1,0 +1,1 @@
+(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push(["object"==typeof document?document.currentScript:void 0,18566,(o,e,t)=>{e.exports=o.r(76562)},86751,o=>{"use strict";o.i(43476),o.i(71645);o.i(18566);let e=Error("Cannot find module './chef.module.css'");throw e.code="MODULE_NOT_FOUND",e}]);
