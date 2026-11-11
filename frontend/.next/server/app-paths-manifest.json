@@ -1,0 +1,17 @@
+{
+  "/_global-error/page": "app/_global-error/page.js",
+  "/_not-found/page": "app/_not-found/page.js",
+  "/admin/menu/page": "app/admin/menu/page.js",
+  "/admin/orders/page": "app/admin/orders/page.js",
+  "/admin/page": "app/admin/page.js",
+  "/admin/userEdit/page": "app/admin/userEdit/page.js",
+  "/api/chef/[id]/route": "app/api/chef/[id]/route.js",
+  "/api/chef/route": "app/api/chef/route.js",
+  "/api/orders/[id]/route": "app/api/orders/[id]/route.js",
+  "/api/orders/route": "app/api/orders/route.js",
+  "/chef/page": "app/chef/page.js",
+  "/favicon.ico/route": "app/favicon.ico/route.js",
+  "/order/page": "app/order/page.js",
+  "/page": "app/page.js",
+  "/staff/page": "app/staff/page.js"
+}

@@ -1,0 +1,3 @@
+module.exports=[92286,a=>{"use strict";var b=a.i(18332);a.s(["default",0,function({children:a}){return(0,b.jsx)("html",{lang:"en","data-scroll-behavior":"smooth",children:(0,b.jsx)("body",{children:a})})},"metadata",0,{title:"ครัวสุดโหด — POS ระบบสั่งอาหาร",description:"ระบบ POS สั่งอาหารออนไลน์สำหรับร้านอาหาร ครัวสุดโหด พร้อมเมนูหลากหลาย"}])},96740,function(a){a.n(a.i(92286))}];
+
+//# sourceMappingURL=frontend_src_app_layout_1zrbkcu.js.map
