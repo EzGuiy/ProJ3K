@@ -7,6 +7,7 @@ import styles from "./staff.module.css";
 const statusConfig = {
   pending: { label: "รอดำเนินการ", icon: " ", color: "orange", next: "preparing" },
   preparing: { label: "กำลังเตรียม", icon: "", color: "blue", next: "ready" },
+  plated: { label: "ปรุงเสร็จ", icon: "", color: "blue", next: "ready" },
   ready: { label: "พร้อมเสิร์ฟ", icon: "", color: "green", next: "served" },
   served: { label: "เสิร์ฟแล้ว", icon: "", color: "purple", next: null },
   cancelled: { label: "ยกเลิก", icon: "", color: "red", next: null },

@@ -33,6 +33,10 @@ export default function Home() {
     router.push("/staff");
   };
 
+  const handleReserve = () => {
+    router.push("/reserve");
+  };
+
   return (
     <div className={styles.container}>
       {/* Background effects */}
@@ -46,9 +50,20 @@ export default function Home() {
           <span className={styles.navLogo}></span>
           <span className={styles.navTitle}>ครัวสุดโหด</span>
         </div>
-        <button className={styles.staffBtn} onClick={handleStaffAccess}>
-          <span>พนักงาน</span>
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button className={styles.staffBtn} onClick={() => router.push('/chef')}>
+            <span>เชฟ</span>
+          </button>
+          <button className={styles.staffBtn} onClick={() => router.push('/reserve/scan')}>
+            <span>สแกนคิว</span>
+          </button>
+          <button className={styles.staffBtn} onClick={() => router.push('/promotions')}>
+            <span>โปรโมชั่น</span>
+          </button>
+          <button className={styles.staffBtn} onClick={handleStaffAccess}>
+            <span>พนักงาน</span>
+          </button>
+        </div>
       </nav>
 
       {/* Hero Section */}
@@ -75,6 +90,15 @@ export default function Home() {
               <div className={styles.ctaText}>
                 <span className={styles.ctaLabel}>สั่งอาหารเลย</span>
                 <span className={styles.ctaSub}>ไม่ต้องสมัครสมาชิก</span>
+              </div>
+              <span className={styles.ctaArrow}>→</span>
+            </button>
+
+            <button className={styles.ctaSecondary} onClick={handleReserve}>
+              <span className={styles.ctaIcon}>📅</span>
+              <div className={styles.ctaText}>
+                <span className={styles.ctaLabel}>จองคิวล่วงหน้า</span>
+                <span className={styles.ctaSub}>เลือกเวลา เลือกโปรโมชั่น รับ QR Code</span>
               </div>
               <span className={styles.ctaArrow}>→</span>
             </button>
