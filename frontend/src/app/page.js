@@ -46,12 +46,18 @@ export default function Home() {
           <span className={styles.navLogo}></span>
           <span className={styles.navTitle}>ครัวสุดโหด</span>
         </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           <button className={styles.staffBtn} onClick={() => router.push('/admin')}>
             <span>แอดมิน</span>
           </button>
           <button className={styles.staffBtn} onClick={() => router.push('/chef')}>
             <span>ห้องครัว (เชฟ)</span>
+          </button>
+          <button className={styles.staffBtn} onClick={() => router.push('/reserve/scan')}>
+            <span>สแกนคิว</span>
+          </button>
+          <button className={styles.staffBtn} onClick={() => router.push('/promotions')}>
+            <span>โปรโมชั่น</span>
           </button>
           <button className={styles.staffBtn} onClick={handleStaffAccess}>
             <span>พนักงานเสิร์ฟ</span>
@@ -79,7 +85,7 @@ export default function Home() {
           {/* CTA Buttons */}
           <div className={styles.ctaGroup}>
             <button className={styles.ctaPrimary} onClick={handleGuestOrder}>
-              <span className={styles.ctaIcon}></span>
+              <span className={styles.ctaIcon}>🍽️</span>
               <div className={styles.ctaText}>
                 <span className={styles.ctaLabel}>สั่งอาหารเลย</span>
                 <span className={styles.ctaSub}>ไม่ต้องสมัครสมาชิก</span>
@@ -88,7 +94,7 @@ export default function Home() {
             </button>
 
             <button className={styles.ctaSecondary} onClick={handleMemberLogin}>
-              <span className={styles.ctaIcon}></span>
+              <span className={styles.ctaIcon}>⭐</span>
               <div className={styles.ctaText}>
                 <span className={styles.ctaLabel}>สมาชิก</span>
                 <span className={styles.ctaSub}>เข้าสู่ระบบเพื่อรับสิทธิพิเศษ</span>
