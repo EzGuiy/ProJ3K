@@ -12,6 +12,42 @@
       "status": "confirmed",
       "qrToken": "Q3RK08TC",
       "createdAt": "2026-11-16T05:16:22.179Z"
+    },
+    {
+      "id": "RSV-9316",
+      "reservationId": "RSV-9316",
+      "name": "Kawin Member",
+      "phone": "0899998888",
+      "partySize": 4,
+      "bookingDate": "2026-11-20",
+      "bookingTime": "18:30",
+      "timeSlot": "2026-11-20T11:30:00.000Z",
+      "orderType": "buffet",
+      "specialRequests": "ขอโต๊ะริมหน้าต่าง ฉลองวันเกิด",
+      "promotionId": null,
+      "status": "confirmed",
+      "qrToken": "Z0D27NO8",
+      "tableNumber": null,
+      "createdAt": "2026-11-18T11:56:33.077Z",
+      "updatedAt": "2026-11-18T11:56:33.077Z"
+    },
+    {
+      "id": "RSV-4584",
+      "reservationId": "RSV-4584",
+      "name": "คุณสมชาย ลูกค้าVIP",
+      "phone": "0815556666",
+      "partySize": 6,
+      "bookingDate": "2026-11-22",
+      "bookingTime": "19:30",
+      "timeSlot": "2026-11-22T12:30:00.000Z",
+      "orderType": "buffet",
+      "specialRequests": "ขอโต๊ะ VIP ริมกระจก ฉลองครบรอบแต่งงาน",
+      "promotionId": null,
+      "status": "seated",
+      "qrToken": "TRAHAJHM",
+      "tableNumber": "5",
+      "createdAt": "2026-11-18T12:06:41.036Z",
+      "updatedAt": "2026-11-18T12:06:44.439Z"
     }
   ]
 }

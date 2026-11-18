@@ -236,6 +236,14 @@ export default function StaffPage() {
     note: "",
   });
 
+  // สถานะสำหรับระบบการจองโต๊ะล่วงหน้า (Reservations)
+  const [reservations, setReservations] = useState([]);
+  const [reservationsLoading, setReservationsLoading] = useState(false);
+  const [filterReservationStatus, setFilterReservationStatus] = useState("all");
+  const [searchReservation, setSearchReservation] = useState("");
+  const [selectedReservationForTable, setSelectedReservationForTable] = useState(null);
+  const [reservationTableNumber, setReservationTableNumber] = useState("1");
+
   // ซ่อน Toast แจ้งเตือนอัตโนมัติ
   useEffect(() => {
     if (!toastMessage) return;
@@ -256,11 +264,25 @@ export default function StaffPage() {
     }
   }, []);
 
+  const fetchReservations = useCallback(async () => {
+    try {
+      const response = await fetch("/api/reservations");
+      const data = await response.json();
+      setReservations(data.reservations || []);
+    } catch (error) {
+      console.error("Error fetching reservations:", error);
+    }
+  }, []);
+
   useEffect(() => {
     fetchOrders();
-    const interval = setInterval(fetchOrders, 5000); // Auto-refresh every 5 seconds
+    fetchReservations();
+    const interval = setInterval(() => {
+      fetchOrders();
+      fetchReservations();
+    }, 5000); // Auto-refresh every 5 seconds
     return () => clearInterval(interval);
-  }, [fetchOrders]);
+  }, [fetchOrders, fetchReservations]);
 
   const handleStatusChange = async (orderId, newStatus) => {
     try {
@@ -436,6 +458,109 @@ export default function StaffPage() {
     return q.status === filterQueueStatus;
   });
 
+  // ── Reservation Handlers ──
+  const handleConfirmSeatReservation = async (reservationId, tableNum) => {
+    if (!tableNum) return;
+    try {
+      const res = await fetch(`/api/reservations/${reservationId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "seated", tableNumber: String(tableNum) }),
+      });
+      if (res.ok) {
+        const target = reservations.find((r) => r.id === reservationId || r.reservationId === reservationId);
+        setToastMessage(`✅ จัดโต๊ะ ${tableNum} ให้ คุณ ${target?.name || ""} เรียบร้อยแล้ว (เวลาจอง: ${target?.bookingTime || "เป๊ะๆ"} น.)`);
+        setSelectedReservationForTable(null);
+        fetchReservations();
+      }
+    } catch (err) {
+      console.error("Error seating reservation:", err);
+    }
+  };
+
+  const handleCancelReservation = async (reservationId) => {
+    try {
+      const res = await fetch(`/api/reservations/${reservationId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "cancelled" }),
+      });
+      if (res.ok) {
+        setToastMessage(`❌ ยกเลิกการจอง #${reservationId} เรียบร้อยแล้ว`);
+        fetchReservations();
+      }
+    } catch (err) {
+      console.error("Error cancelling reservation:", err);
+    }
+  };
+
+  const handleRestoreReservation = async (reservationId) => {
+    try {
+      const res = await fetch(`/api/reservations/${reservationId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "confirmed" }),
+      });
+      if (res.ok) {
+        setToastMessage(`🔄 กู้คืนคิวจอง #${reservationId} เป็นสถานะยืนยันแล้ว`);
+        fetchReservations();
+      }
+    } catch (err) {
+      console.error("Error restoring reservation:", err);
+    }
+  };
+
+  // ข้อมูลสถิติของรายการจองโต๊ะ
+  const todayDateStr = new Date().toISOString().slice(0, 10);
+  const reservationCounts = {
+    all: reservations.length,
+    today: reservations.filter((r) => r.bookingDate === todayDateStr || (r.timeSlot && r.timeSlot.slice(0, 10) === todayDateStr)).length,
+    confirmed: reservations.filter((r) => r.status === "confirmed").length,
+    seated: reservations.filter((r) => r.status === "seated").length,
+    cancelled: reservations.filter((r) => r.status === "cancelled").length,
+  };
+
+  const reservationStatCards = [
+    { key: "today",     label: "คิวจองวันนี้",         dotClass: "bg-orange", count: reservationCounts.today     },
+    { key: "confirmed", label: "รอลูกค้ามาถึง (กำลังมา)", dotClass: "bg-amber",  count: reservationCounts.confirmed },
+    { key: "seated",    label: "จัดโต๊ะ/นั่งแล้ว",       dotClass: "bg-green",  count: reservationCounts.seated    },
+    { key: "all",       label: "คิวจองทั้งหมด",         dotClass: "bg-purple", count: reservationCounts.all       },
+  ];
+
+  const reservationFilterOptions = [
+    { key: "all",       label: "ทั้งหมด" },
+    { key: "today",     label: "วันนี้" },
+    { key: "confirmed", label: "รอลูกค้ามาถึง" },
+    { key: "seated",    label: "นั่งโต๊ะแล้ว" },
+    { key: "cancelled", label: "ยกเลิก" },
+  ];
+
+  const filteredReservations = reservations
+    .filter((r) => {
+      if (filterReservationStatus === "today") {
+        const isToday = r.bookingDate === todayDateStr || (r.timeSlot && r.timeSlot.slice(0, 10) === todayDateStr);
+        if (!isToday) return false;
+      } else if (filterReservationStatus !== "all") {
+        if (r.status !== filterReservationStatus) return false;
+      }
+
+      if (searchReservation.trim()) {
+        const q = searchReservation.toLowerCase().trim();
+        const matchName = (r.name || "").toLowerCase().includes(q);
+        const matchPhone = (r.phone || "").includes(q);
+        const matchId = String(r.id || r.reservationId || "").toLowerCase().includes(q);
+        const matchToken = (r.qrToken || "").toLowerCase().includes(q);
+        if (!matchName && !matchPhone && !matchId && !matchToken) return false;
+      }
+
+      return true;
+    })
+    .sort((a, b) => {
+      const timeA = new Date(a.timeSlot || `${a.bookingDate}T${a.bookingTime}:00`).getTime();
+      const timeB = new Date(b.timeSlot || `${b.bookingDate}T${b.bookingTime}:00`).getTime();
+      return timeA - timeB;
+    });
+
   const formatTime = (dateStr) => {
     const d = new Date(dateStr);
     return d.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
@@ -490,7 +615,11 @@ export default function StaffPage() {
             </button>
             <div>
               <h1 className="text-lg font-bold leading-tight">
-                {activeNav === "orders" ? "ระบบจัดการออเดอร์" : "ระบบจัดการคิวลูกค้า (QR Code)"}
+                {activeNav === "orders"
+                  ? "ระบบจัดการออเดอร์"
+                  : activeNav === "queue"
+                  ? "ระบบจัดการคิวลูกค้า (QR Code)"
+                  : "ระบบคิวจองโต๊ะล่วงหน้า (ตามเวลาเป๊ะๆ)"}
               </h1>
               <p className="mt-0.5 text-xs text-ink-3">
                 อัพเดทล่าสุด: {formatTime(lastRefresh)}
@@ -498,7 +627,7 @@ export default function StaffPage() {
             </div>
           </div>
 
-          {/* Center: Navigation Bar (Navbar สลับโหมด ออเดอร์ / จัดการคิว) */}
+          {/* Center: Navigation Bar (Navbar สลับโหมด ออเดอร์ / คิวหน้าร้าน / คิวจองล่วงหน้า) */}
           <nav className="flex items-center rounded-lg border border-line bg-glass p-1 max-sm:w-full max-sm:justify-center">
             <button
               type="button"
@@ -538,6 +667,28 @@ export default function StaffPage() {
                     : "bg-amber/20 text-amber"
                 }`}>
                   รอ {queueCounts.waiting}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveNav("reservations")}
+              className={`flex items-center gap-2 rounded-md px-3.5 py-1.5 text-xs font-semibold transition ${FOCUS} ${
+                activeNav === "reservations"
+                  ? "bg-orange text-[#0a0a0f] shadow-sm font-bold"
+                  : "text-ink-2 hover:text-ink"
+              }`}
+            >
+              <span>📅</span>
+              <span>คิวจองล่วงหน้า</span>
+              {reservationCounts.confirmed > 0 && (
+                <span className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
+                  activeNav === "reservations"
+                    ? "bg-black/20 text-[#0a0a0f]"
+                    : "bg-orange/20 text-orange"
+                }`}>
+                  รอ {reservationCounts.confirmed}
                 </span>
               )}
             </button>
@@ -1148,7 +1299,343 @@ export default function StaffPage() {
             )}
           </div>
         )}
+
+        {/* ============================================================== */}
+        {/* VIEW 3: จัดการคิวจองโต๊ะล่วงหน้า (RESERVATIONS VIEW)             */}
+        {/* ============================================================== */}
+        {activeNav === "reservations" && (
+          <div className="animate-fade-quick">
+            {/* ── Reservation Stat Cards ── */}
+            <div className="grid grid-cols-2 gap-px p-4 animate-rise md:grid-cols-4 md:p-6">
+              <div className="col-span-2 grid grid-cols-2 overflow-hidden rounded-lg border border-line md:col-span-4 md:grid-cols-4">
+                {reservationStatCards.map((s, i) => (
+                  <div
+                    key={s.key}
+                    className={`flex flex-col gap-1.5 px-5 py-5 transition-colors hover:bg-glass ${
+                      i !== reservationStatCards.length - 1 ? "border-r border-line" : ""
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`size-2 rounded-full ${s.dotClass}`} />
+                      <span className="text-xs font-semibold text-ink-3">{s.label}</span>
+                    </div>
+                    <span className="text-3xl font-extrabold tracking-tight text-ink">
+                      {s.count}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ── Search and Filter Toolbar ── */}
+            <div className="mx-4 mb-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 md:mx-6">
+              {/* Filter Tabs */}
+              <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-line bg-glass p-1">
+                {reservationFilterOptions.map((f) => {
+                  const active = filterReservationStatus === f.key;
+                  const count =
+                    f.key === "all"
+                      ? reservationCounts.all
+                      : f.key === "today"
+                      ? reservationCounts.today
+                      : reservationCounts[f.key] ?? 0;
+
+                  return (
+                    <button
+                      key={f.key}
+                      type="button"
+                      onClick={() => setFilterReservationStatus(f.key)}
+                      className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${FOCUS} ${
+                        active
+                          ? "bg-orange text-[#0a0a0f] shadow-sm font-bold"
+                          : "text-ink-2 hover:text-ink hover:bg-glass-strong"
+                      }`}
+                    >
+                      <span>{f.label}</span>
+                      <span
+                        className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
+                          active ? "bg-black/20 text-[#0a0a0f]" : "bg-glass text-ink-3"
+                        }`}
+                      >
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Search Box & Refresh Button */}
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1 md:w-64">
+                  <input
+                    type="text"
+                    value={searchReservation}
+                    onChange={(e) => setSearchReservation(e.target.value)}
+                    placeholder="ค้นหาชื่อ, เบอร์โทร, รหัสจอง..."
+                    className="w-full rounded-md border border-line bg-glass px-3 py-1.5 text-xs text-ink placeholder:text-ink-3 focus:border-orange focus:outline-none"
+                  />
+                  {searchReservation && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchReservation("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-ink-3 hover:text-ink"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={fetchReservations}
+                  className="flex items-center gap-1.5 rounded-md border border-line bg-glass px-3 py-1.5 text-xs font-semibold text-ink-2 hover:bg-glass-strong hover:text-ink transition"
+                  title="รีเฟรชข้อมูลคิวจอง"
+                >
+                  <Icon name="refresh" className="size-3.5" />
+                  <span>รีเฟรช</span>
+                </button>
+              </div>
+            </div>
+
+            {/* ── Reservations List / Empty State ── */}
+            {filteredReservations.length === 0 ? (
+              <div className="mx-4 my-8 flex flex-col items-center justify-center rounded-xl border border-dashed border-line p-12 text-center md:mx-6">
+                <span className="text-4xl mb-3">📅</span>
+                <p className="text-sm font-bold text-ink">ไม่พบรายการจองโต๊ะล่วงหน้า</p>
+                <p className="mt-1 text-xs text-ink-3">
+                  เมื่อลูกค้าทำการจองผ่านหน้าเว็บไซต์ /reserve ข้อมูลจะปรากฏที่นี่ตามเวลาเป๊ะๆ ทันที
+                </p>
+              </div>
+            ) : (
+              <ul className="mx-4 mb-8 grid grid-cols-1 gap-4 md:mx-6 md:grid-cols-2 lg:grid-cols-3">
+                {filteredReservations.map((res) => {
+                  const isConfirmed = res.status === "confirmed";
+                  const isSeated = res.status === "seated";
+                  const isCancelled = res.status === "cancelled";
+
+                  return (
+                    <li
+                      key={res.id || res.reservationId}
+                      className={`relative flex flex-col justify-between overflow-hidden rounded-xl border bg-panel p-5 shadow-lg transition-all hover:border-orange/40 ${
+                        isSeated
+                          ? "border-green/30"
+                          : isCancelled
+                          ? "border-red/20 opacity-60"
+                          : "border-line"
+                      }`}
+                    >
+                      {/* Top Bar: Time and Status */}
+                      <div>
+                        <div className="flex items-start justify-between gap-3 mb-3 border-b border-line pb-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-base font-black text-orange font-mono">
+                                ⏰ {res.bookingTime || "18:30"} น.
+                              </span>
+                              <span className="rounded bg-glass px-2 py-0.5 text-[10px] font-bold text-ink-2 font-mono">
+                                #{res.id || res.reservationId}
+                              </span>
+                            </div>
+                            <span className="text-xs text-ink-3 block mt-0.5">
+                              📅 วันที่ {res.bookingDate || res.timeSlot?.slice(0, 10)}
+                            </span>
+                          </div>
+
+                          {/* Status Badge */}
+                          <div>
+                            {isConfirmed && (
+                              <span className="rounded-full bg-amber/15 text-amber px-2.5 py-1 text-[11px] font-bold flex items-center gap-1 border border-amber/30">
+                                <span>⏳</span> รอลูกค้ามาถึง
+                              </span>
+                            )}
+                            {isSeated && (
+                              <span className="rounded-full bg-green/15 text-green px-2.5 py-1 text-[11px] font-bold flex items-center gap-1 border border-green/30">
+                                <span>🟢</span> นั่งโต๊ะ {res.tableNumber}
+                              </span>
+                            )}
+                            {isCancelled && (
+                              <span className="rounded-full bg-red/15 text-red px-2.5 py-1 text-[11px] font-bold flex items-center gap-1 border border-red/30">
+                                <span>❌</span> ยกเลิกแล้ว
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Customer Info */}
+                        <div className="space-y-2 mb-4">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-bold text-ink">
+                              คุณ {res.name}
+                            </span>
+                            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-glass text-ink-2">
+                              👥 {res.partySize} ท่าน
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-xs text-ink-2">
+                            <a
+                              href={`tel:${res.phone}`}
+                              className="font-mono hover:text-orange flex items-center gap-1.5 transition"
+                              title="คลิกเพื่อโทรออก"
+                            >
+                              <Icon name="phone" className="size-3 text-ink-3" />
+                              <span>{res.phone}</span>
+                            </a>
+                            <span className="text-ink-3 text-[11px]">
+                              {res.orderType === "buffet" ? "🍽️ บุฟเฟ่ต์" : "🥩 อลาคาร์ต"}
+                            </span>
+                          </div>
+
+                          {/* Special Requests */}
+                          {res.specialRequests && (
+                            <div className="rounded-md bg-amber/10 border border-amber/20 p-2.5 text-xs text-amber mt-2">
+                              <span className="font-bold block mb-0.5">💬 ความต้องการพิเศษ:</span>
+                              <span className="text-ink-2">{res.specialRequests}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="pt-3 border-t border-line flex items-center gap-2">
+                        {isConfirmed && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedReservationForTable(res);
+                                setReservationTableNumber("1");
+                              }}
+                              className={`flex-1 flex items-center justify-center gap-1.5 rounded-md bg-green px-3 py-2 text-xs font-bold text-[#0a0a0f] shadow-md transition hover:brightness-110 ${FOCUS}`}
+                            >
+                              <span>📍 จัดโต๊ะ / นั่งโต๊ะนี้</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleCancelReservation(res.id || res.reservationId)}
+                              className={`rounded-md border border-line px-2.5 py-2 text-xs font-medium text-ink-3 hover:text-red hover:bg-red/10 ${FOCUS}`}
+                              title="ยกเลิกการจอง"
+                            >
+                              ยกเลิก
+                            </button>
+                          </>
+                        )}
+
+                        {isSeated && (
+                          <div className="flex w-full items-center justify-between text-xs">
+                            <span className="text-green font-bold flex items-center gap-1">
+                              ✓ จัดนั่งที่โต๊ะ {res.tableNumber} แล้ว
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedReservationForTable(res);
+                                setReservationTableNumber(res.tableNumber || "1");
+                              }}
+                              className="text-ink-3 hover:text-ink text-[11px] underline"
+                            >
+                              เปลี่ยนโต๊ะ
+                            </button>
+                          </div>
+                        )}
+
+                        {isCancelled && (
+                          <div className="flex w-full items-center justify-between text-xs">
+                            <span className="text-ink-3 italic">การจองนี้ถูกยกเลิกแล้ว</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRestoreReservation(res.id || res.reservationId)}
+                              className="rounded-md border border-line bg-glass px-2.5 py-1 text-xs font-medium text-ink-2 hover:bg-glass-strong hover:text-ink"
+                            >
+                              🔄 กู้คืนคิวจอง
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        )}
       </main>
+
+      {/* ── Modal: จัดโต๊ะสำหรับการจองล่วงหน้า (Assign Table for Reservation) ── */}
+      {selectedReservationForTable && (
+        <div
+          className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-fade-quick"
+          onClick={() => setSelectedReservationForTable(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl border border-line bg-panel p-6 shadow-2xl animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-ink">
+                  📍 จัดโต๊ะให้การจอง #{selectedReservationForTable.id || selectedReservationForTable.reservationId}
+                </h3>
+                <p className="text-xs text-ink-3 mt-0.5">
+                  ลูกค้า: คุณ {selectedReservationForTable.name} ({selectedReservationForTable.partySize} ท่าน)
+                  <br />
+                  รอบเวลาจอง: <strong className="text-orange">{selectedReservationForTable.bookingTime || "18:30"} น.</strong>
+                </p>
+              </div>
+              <button
+                className="text-ink-3 hover:text-ink text-base"
+                onClick={() => setSelectedReservationForTable(null)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="mb-3 text-xs font-semibold text-ink-2">
+              เลือกหมายเลขโต๊ะที่พร้อมให้บริการ:
+            </p>
+
+            {/* Grid โต๊ะ 1 - 10 */}
+            <div className="grid grid-cols-5 gap-2 mb-4">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                <button
+                  key={num}
+                  type="button"
+                  className={`flex h-11 items-center justify-center rounded-lg border font-bold text-sm transition ${
+                    reservationTableNumber === String(num)
+                      ? "border-orange bg-orange text-[#0a0a0f]"
+                      : "border-line bg-glass text-ink hover:border-orange/50"
+                  }`}
+                  onClick={() => setReservationTableNumber(String(num))}
+                >
+                  {num}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="หรือระบุเลขโต๊ะอื่นๆ"
+                value={reservationTableNumber}
+                onChange={(e) => setReservationTableNumber(e.target.value)}
+                className="flex-1 rounded-md border border-line bg-glass px-3 py-2 text-sm text-ink placeholder:text-ink-3 focus:border-orange focus:outline-none"
+              />
+              <button
+                type="button"
+                className={`rounded-md bg-orange px-4 py-2 text-sm font-bold text-[#0a0a0f] hover:brightness-110 ${FOCUS}`}
+                onClick={() =>
+                  handleConfirmSeatReservation(
+                    selectedReservationForTable.id || selectedReservationForTable.reservationId,
+                    reservationTableNumber
+                  )
+                }
+              >
+                ยืนยันนั่งโต๊ะ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Modal 1: จัดโต๊ะสำหรับคิว (Assign Table Modal) ── */}
       {selectedQueueForTable && (
