@@ -1,0 +1,153 @@
+.page {
+  min-height: 100vh;
+  background: #101114;
+  color: #f4f1ea;
+  padding: 1.25rem;
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.header h1 {
+  font-size: 1.5rem;
+  line-height: 1.2;
+}
+
+.muted {
+  color: #b9b3a8;
+}
+
+.ghost,
+.primary {
+  border-radius: 12px;
+  padding: 0.7rem 0.95rem;
+  font-weight: 700;
+}
+
+.ghost {
+  background: #24272e;
+  color: #f4f1ea;
+  border: 1px solid #343842;
+}
+
+.primary {
+  background: #e07a2f;
+  color: #1a120c;
+}
+
+.cameraBox {
+  background: #1b1d22;
+  border: 1px solid #2d3036;
+  border-radius: 16px;
+  overflow: hidden;
+  min-height: 220px;
+}
+
+.video {
+  width: 100%;
+  max-height: 360px;
+  background: #000;
+  object-fit: cover;
+}
+
+.manual {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.manual label,
+.queue h2 {
+  font-size: 0.95rem;
+}
+
+.manualRow {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.manual input {
+  flex: 1;
+  background: #1b1d22;
+  color: #f4f1ea;
+  border: 1px solid #343842;
+  border-radius: 12px;
+  padding: 0.75rem 0.85rem;
+}
+
+.queue {
+  margin-top: 1.4rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.queueItem {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr auto auto;
+  gap: 0.6rem;
+  align-items: center;
+  text-align: left;
+  background: #1b1d22;
+  color: #f4f1ea;
+  border: 1px solid #2d3036;
+  border-radius: 12px;
+  padding: 0.75rem;
+}
+
+.card {
+  background: #1b1d22;
+  border: 1px solid #2d3036;
+  border-radius: 16px;
+  padding: 1.1rem;
+}
+
+.token {
+  color: #f0a05a;
+  font-weight: 700;
+}
+
+.card h2 {
+  margin: 0.2rem 0 0.8rem;
+}
+
+.card dl {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.card dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  border-top: 1px solid #2d3036;
+  padding-top: 0.45rem;
+}
+
+.card dt {
+  color: #b9b3a8;
+}
+
+.card .primary {
+  width: 100%;
+  margin-top: 1rem;
+}
+
+.error {
+  background: #3a2224;
+  color: #ffb4b4;
+  border-radius: 10px;
+  padding: 0.7rem 0.9rem;
+  margin-bottom: 0.8rem;
+}
+
+@media (max-width: 640px) {
+  .queueItem {
+    grid-template-columns: 1fr 1fr;
+  }
+}

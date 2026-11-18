@@ -1,0 +1,17 @@
+{
+  "nextId": 2,
+  "reservations": [
+    {
+      "id": 1,
+      "name": "กนกกร",
+      "phone": "0992560730",
+      "partySize": 2,
+      "timeSlot": "2026-11-16T08:00:00.000Z",
+      "orderType": "buffet",
+      "promotionId": null,
+      "status": "confirmed",
+      "qrToken": "Q3RK08TC",
+      "createdAt": "2026-11-16T05:16:22.179Z"
+    }
+  ]
+}

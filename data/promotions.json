@@ -1,0 +1,26 @@
+[
+  {
+    "id": "EARLYBIRD",
+    "icon": "🌅",
+    "title": "Early Bird",
+    "desc": "จองก่อน 11:00 น.",
+    "benefit": "ลด 10% จากยอดรวม",
+    "rule": { "type": "beforeHour", "hour": 11 }
+  },
+  {
+    "id": "GROUP4",
+    "icon": "🎉",
+    "title": "มากันเยอะ",
+    "desc": "สำหรับ 4 คนขึ้นไป",
+    "benefit": "เครื่องดื่มฟรี 1 แก้วต่อคน",
+    "rule": { "type": "minParty", "min": 4 }
+  },
+  {
+    "id": "BUFFET25",
+    "icon": "🍽️",
+    "title": "บุฟเฟ่สุดคุ้ม",
+    "desc": "เฉพาะบุฟเฟ่",
+    "benefit": "ลด 25 บาทต่อคน",
+    "rule": { "type": "orderType", "orderType": "buffet" }
+  }
+]

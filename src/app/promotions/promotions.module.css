@@ -1,0 +1,82 @@
+.page {
+  min-height: 100vh;
+  background: #101114;
+  color: #f4f1ea;
+  padding: 1.25rem;
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.kicker {
+  color: #f0a05a;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.header h1 {
+  font-size: 1.7rem;
+  line-height: 1.2;
+}
+
+.back {
+  background: #24272e;
+  color: #f4f1ea;
+  border: 1px solid #343842;
+  border-radius: 12px;
+  padding: 0.55rem 0.8rem;
+}
+
+.lead {
+  color: #b9b3a8;
+  margin-bottom: 1rem;
+}
+
+.list {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.card {
+  background: #1b1d22;
+  border: 1px solid #2d3036;
+  border-radius: 16px;
+  padding: 1rem;
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.35rem;
+}
+
+.titleRow span {
+  font-size: 1.4rem;
+}
+
+.card p {
+  color: #b9b3a8;
+}
+
+.card strong {
+  display: block;
+  margin-top: 0.55rem;
+  color: #f0a05a;
+}
+
+.reserve {
+  display: inline-block;
+  margin-top: 1.2rem;
+  background: #e07a2f;
+  color: #1a120c;
+  font-weight: 700;
+  border-radius: 12px;
+  padding: 0.8rem 1.1rem;
+}
