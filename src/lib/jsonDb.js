@@ -2,7 +2,11 @@ import fs from "fs";
 import path from "path";
 
 function filePath(filename) {
-  return path.join(process.cwd(), "data", filename);
+  const p1 = path.join(process.cwd(), "data", filename);
+  if (fs.existsSync(p1)) return p1;
+  const p2 = path.join(process.cwd(), "ProJ3K", "data", filename);
+  if (fs.existsSync(p2)) return p2;
+  return fs.existsSync(path.join(process.cwd(), "ProJ3K")) ? p2 : p1;
 }
 
 export function readJson(filename, fallback) {
