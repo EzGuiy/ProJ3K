@@ -529,7 +529,7 @@ export default function ReserveLandingPage() {
           </h1>
 
           <p className="mt-6 text-base sm:text-xl text-white/75 max-w-3xl mx-auto leading-relaxed font-light">
-            สัมผัสประสบการณ์ความอร่อยจากวัตถุดิบนำเข้าเกรดสูงสุด ทั้งเนื้อวากิวออสเตรเลีย A5, ซีฟู้ดสดจากทะเลลึก 
+            สัมผัสประสบการณ์ความอร่อยจากวัตถุดิบนำเข้าเกรดสูงสุด ทั้งเนื้อวากิวออสเตรเลีย A5, ซีฟู้ดสดจากทะเลลึก
             และ 5 สเตชั่นครัวกระทะเหล็กปรุงสดร้อนๆ จานต่อจาน พร้อมเสิร์ฟทั้งแบบ
             <strong className="text-white font-semibold"> อลาคาร์ตสุดประณีต </strong> และ
             <strong className="text-[#ffb347] font-semibold"> บุฟเฟ่ต์พรีเมียมไม่อั้น</strong>
@@ -561,7 +561,7 @@ export default function ReserveLandingPage() {
               href="#booking"
               className="w-full sm:w-auto px-8 py-4 rounded-xl bg-gradient-to-r from-[#ff6b35] to-[#ff8c42] text-black font-extrabold text-base shadow-xl shadow-[#ff6b35]/30 hover:scale-105 active:scale-95 transition flex items-center justify-center gap-2"
             >
-              <span>📅</span> จองโต๊ะล่วงหน้า (เลือกเวลาเป๊ะๆ)
+              <span>📅</span> จองโต๊ะล่วงหน้า
             </a>
             <a
               href="#membership"
@@ -589,13 +589,13 @@ export default function ReserveLandingPage() {
                 <span className="text-[#ff6b35]">&quot;ครัวสุดโหด&quot;?</span>
               </h2>
               <p className="mt-6 text-white/70 leading-relaxed text-base">
-                คำว่า <strong className="text-white">&quot;ครัวสุดโหด&quot;</strong> ไม่ได้หมายถึงความดุร้ายหรือราคาที่แพง 
-                แต่คือ <strong className="text-[#ffb347]">ความโหดในความประณีต ความโหดในการคัดสรรวัตถุดิบเกรดสูงสุด 
-                และความโหดในมาตรฐานรสชาติ</strong> ที่ไม่ยอมประนีประนอมแม้แต่มิลลิกรัมเดียว
+                คำว่า <strong className="text-white">&quot;ครัวสุดโหด&quot;</strong> ไม่ได้หมายถึงความดุร้ายหรือราคาที่แพง
+                แต่คือ <strong className="text-[#ffb347]">ความโหดในความประณีต ความโหดในการคัดสรรวัตถุดิบเกรดสูงสุด
+                  และความโหดในมาตรฐานรสชาติ</strong> ที่ไม่ยอมประนีประนอมแม้แต่มิลลิกรัมเดียว
               </p>
               <p className="mt-4 text-white/70 leading-relaxed text-base">
                 ร้านของเรานำเสนอประสบการณ์ 2 รูปแบบในพื้นที่เดียวกัน ไม่ว่าคุณจะเลือกสัมผัสความหรูหราของ
-                <strong className="text-white"> อาหารจานเดี่ยวระดับ Fine Dining </strong> 
+                <strong className="text-white"> อาหารจานเดี่ยวระดับ Fine Dining </strong>
                 หรือความคุ้มค่าไม่อั้นของ <strong className="text-[#ffb347]">Grand Buffet 5 สเตชั่น </strong>
                 ทุกจานจะถูกปรุงสดใหม่และผ่านการตรวจสอบคุณภาพ (QC) จากหัวหน้าเชฟประจำสเตชั่นก่อนเสิร์ฟถึงโต๊ะของคุณเสมอ
               </p>
@@ -765,11 +765,10 @@ export default function ReserveLandingPage() {
                   key={cat.key}
                   type="button"
                   onClick={() => setActiveMenuCategory(cat.key)}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
-                    activeMenuCategory === cat.key
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${activeMenuCategory === cat.key
                       ? "bg-[#ff6b35] text-black shadow-md shadow-[#ff6b35]/25"
                       : "bg-white/5 text-white/70 hover:text-white hover:bg-white/10"
-                  }`}
+                    }`}
                 >
                   {cat.label}
                 </button>
@@ -854,7 +853,7 @@ export default function ReserveLandingPage() {
                   </span>
                 </h2>
                 <p className="mt-4 text-sm text-white/70 leading-relaxed">
-                  ร่วมเป็นครอบครัวเดียวกับ ครัวสุดโหด เพื่อรับสิทธิพิเศษเหนือระดับ ส่วนลดอาหารทุกบิล 
+                  ร่วมเป็นครอบครัวเดียวกับ ครัวสุดโหด เพื่อรับสิทธิพิเศษเหนือระดับ ส่วนลดอาหารทุกบิล
                   ของขวัญพิเศษในเดือนเกิด และสิทธิ์จองโต๊ะโซน VIP ก่อนใคร
                 </p>
 
@@ -1018,33 +1017,30 @@ export default function ReserveLandingPage() {
                     <button
                       type="button"
                       onClick={() => setBookingDate(todayIso)}
-                      className={`px-4 py-2.5 rounded-xl text-xs font-bold transition ${
-                        bookingDate === todayIso
+                      className={`px-4 py-2.5 rounded-xl text-xs font-bold transition ${bookingDate === todayIso
                           ? "bg-[#ff6b35] text-black shadow-md shadow-[#ff6b35]/25"
                           : "bg-white/5 text-white/70 hover:bg-white/10"
-                      }`}
+                        }`}
                     >
                       วันนี้ ({new Date().toLocaleDateString("th-TH", { day: "numeric", month: "short" })})
                     </button>
                     <button
                       type="button"
                       onClick={() => setBookingDate(tomorrowIso)}
-                      className={`px-4 py-2.5 rounded-xl text-xs font-bold transition ${
-                        bookingDate === tomorrowIso
+                      className={`px-4 py-2.5 rounded-xl text-xs font-bold transition ${bookingDate === tomorrowIso
                           ? "bg-[#ff6b35] text-black shadow-md shadow-[#ff6b35]/25"
                           : "bg-white/5 text-white/70 hover:bg-white/10"
-                      }`}
+                        }`}
                     >
                       พรุ่งนี้ ({new Date(Date.now() + 86400000).toLocaleDateString("th-TH", { day: "numeric", month: "short" })})
                     </button>
                     <button
                       type="button"
                       onClick={() => setBookingDate(dayAfterIso)}
-                      className={`px-4 py-2.5 rounded-xl text-xs font-bold transition ${
-                        bookingDate === dayAfterIso
+                      className={`px-4 py-2.5 rounded-xl text-xs font-bold transition ${bookingDate === dayAfterIso
                           ? "bg-[#ff6b35] text-black shadow-md shadow-[#ff6b35]/25"
                           : "bg-white/5 text-white/70 hover:bg-white/10"
-                      }`}
+                        }`}
                     >
                       มะรืนนี้ ({new Date(Date.now() + 172800000).toLocaleDateString("th-TH", { day: "numeric", month: "short" })})
                     </button>
@@ -1075,11 +1071,10 @@ export default function ReserveLandingPage() {
                             setBookingTime(slot);
                             setCustomTime("");
                           }}
-                          className={`py-2.5 px-3 rounded-xl text-xs font-mono font-bold transition ${
-                            bookingTime === slot && !customTime
+                          className={`py-2.5 px-3 rounded-xl text-xs font-mono font-bold transition ${bookingTime === slot && !customTime
                               ? "bg-[#ffb347] text-black shadow-md shadow-[#ffb347]/20"
                               : "bg-white/5 text-white/80 hover:bg-white/10"
-                          }`}
+                            }`}
                         >
                           {slot} น.
                         </button>
@@ -1100,11 +1095,10 @@ export default function ReserveLandingPage() {
                             setBookingTime(slot);
                             setCustomTime("");
                           }}
-                          className={`py-2.5 px-2 rounded-xl text-xs font-mono font-bold transition ${
-                            bookingTime === slot && !customTime
+                          className={`py-2.5 px-2 rounded-xl text-xs font-mono font-bold transition ${bookingTime === slot && !customTime
                               ? "bg-[#ff6b35] text-black shadow-md shadow-[#ff6b35]/25"
                               : "bg-white/5 text-white/80 hover:bg-white/10"
-                          }`}
+                            }`}
                         >
                           {slot} น.
                         </button>
@@ -1154,11 +1148,10 @@ export default function ReserveLandingPage() {
                           key={size}
                           type="button"
                           onClick={() => setPartySize(size)}
-                          className={`py-2.5 rounded-xl text-xs font-bold transition ${
-                            partySize === size
+                          className={`py-2.5 rounded-xl text-xs font-bold transition ${partySize === size
                               ? "bg-white text-black font-extrabold"
                               : "bg-white/5 text-white/70 hover:bg-white/10"
-                          }`}
+                            }`}
                         >
                           {size} ท่าน
                         </button>
@@ -1175,11 +1168,10 @@ export default function ReserveLandingPage() {
                       <button
                         type="button"
                         onClick={() => setOrderType("buffet")}
-                        className={`p-3.5 rounded-2xl border text-left transition flex items-center gap-3 ${
-                          orderType === "buffet"
+                        className={`p-3.5 rounded-2xl border text-left transition flex items-center gap-3 ${orderType === "buffet"
                             ? "bg-[#ff6b35]/15 border-[#ff6b35] text-white"
                             : "bg-white/5 border-white/10 text-white/60 hover:bg-white/10"
-                        }`}
+                          }`}
                       >
                         <span className="text-2xl">🍽️</span>
                         <div>
@@ -1191,11 +1183,10 @@ export default function ReserveLandingPage() {
                       <button
                         type="button"
                         onClick={() => setOrderType("alacarte")}
-                        className={`p-3.5 rounded-2xl border text-left transition flex items-center gap-3 ${
-                          orderType === "alacarte"
+                        className={`p-3.5 rounded-2xl border text-left transition flex items-center gap-3 ${orderType === "alacarte"
                             ? "bg-[#ffb347]/15 border-[#ffb347] text-white"
                             : "bg-white/5 border-white/10 text-white/60 hover:bg-white/10"
-                        }`}
+                          }`}
                       >
                         <span className="text-2xl">🥩</span>
                         <div>
@@ -1266,11 +1257,10 @@ export default function ReserveLandingPage() {
                         key={req}
                         type="button"
                         onClick={() => toggleSpecialRequest(req)}
-                        className={`px-3 py-1.5 rounded-lg text-xs transition border ${
-                          specialRequests.includes(req)
+                        className={`px-3 py-1.5 rounded-lg text-xs transition border ${specialRequests.includes(req)
                             ? "bg-[#2dd4a8]/20 border-[#2dd4a8] text-[#2dd4a8] font-bold"
                             : "bg-white/5 border-white/5 text-white/60 hover:text-white"
-                        }`}
+                          }`}
                       >
                         {specialRequests.includes(req) ? "✓ " : "+ "}
                         {req}
