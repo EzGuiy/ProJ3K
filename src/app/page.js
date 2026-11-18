@@ -93,15 +93,6 @@ export default function Home() {
               <span className={styles.ctaArrow}>→</span>
             </button>
 
-            <button className={styles.ctaSecondary} onClick={() => router.push("/reserve")}>
-              <span className={styles.ctaIcon}>📅</span>
-              <div className={styles.ctaText}>
-                <span className={styles.ctaLabel}>จองคิวล่วงหน้า</span>
-                <span className={styles.ctaSub}>เลือกเวลา โปรโมชั่น รับ QR Code</span>
-              </div>
-              <span className={styles.ctaArrow}>→</span>
-            </button>
-
             <button className={styles.ctaSecondary} onClick={handleMemberLogin}>
               <span className={styles.ctaIcon}>⭐</span>
               <div className={styles.ctaText}>
