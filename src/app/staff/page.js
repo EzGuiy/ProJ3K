@@ -302,23 +302,21 @@ export default function StaffPage() {
     return () => clearInterval(interval);
   }, [fetchOrders, fetchReservations, fetchFloorPlan]);
 
-  // เมื่อเปิด modal จัดโต๊ะให้คิว ให้รีเฟรชผังร้านและเลือกโต๊ะว่างแรกอัตโนมัติ
+  // เมื่อเปิด modal จัดโต๊ะให้คิว ให้ตั้งค่าโต๊ะว่างเริ่มต้น (รันเฉพาะตอนเปิด modal สำหรับคิวนั้นๆ)
   useEffect(() => {
     if (selectedQueueForTable) {
-      fetchFloorPlan();
       const firstAvailable = floorPlanTables.find((t) => t.status === "AVAILABLE");
       setSelectedTableNumber(firstAvailable ? String(firstAvailable.table_number) : "");
     }
-  }, [selectedQueueForTable, fetchFloorPlan, floorPlanTables]);
+  }, [selectedQueueForTable?.id]);
 
-  // เมื่อเปิด modal จัดโต๊ะให้การจอง ให้รีเฟรชผังร้านและเลือกโต๊ะว่างแรกอัตโนมัติ
+  // เมื่อเปิด modal จัดโต๊ะให้การจอง ให้ตั้งค่าโต๊ะว่างเริ่มต้น (รันเฉพาะตอนเปิด modal สำหรับการจองนั้นๆ)
   useEffect(() => {
     if (selectedReservationForTable) {
-      fetchFloorPlan();
       const firstAvailable = floorPlanTables.find((t) => t.status === "AVAILABLE");
       setReservationTableNumber(firstAvailable ? String(firstAvailable.table_number) : "");
     }
-  }, [selectedReservationForTable, fetchFloorPlan, floorPlanTables]);
+  }, [selectedReservationForTable?.id || selectedReservationForTable?.reservationId]);
 
   const handleStatusChange = async (orderId, newStatus) => {
     try {
@@ -380,21 +378,41 @@ export default function StaffPage() {
     setToastMessage(`📢 กำลังเรียกคิว ${queueId} (${target?.customerName || ""})`);
   };
 
-  // จัดโต๊ะให้ลูกค้า
-  const handleConfirmAssignTable = (queueId, tableNum) => {
+  // จัดโต๊ะให้ลูกค้า (ล็อคสถานะโต๊ะใน MySQL และเริ่มจับเวลาทันที)
+  const handleConfirmAssignTable = async (queueId, tableNum) => {
     if (!tableNum) return;
-    setQueues((prev) =>
-      prev.map((q) =>
-        q.id === queueId
-          ? { ...q, status: "seated", tableNumber: String(tableNum) }
-          : q
-      )
-    );
-    const target = queues.find((q) => q.id === queueId);
-    setSelectedQueueForTable(null);
-    setToastMessage(
-      `✅ จัดคิว ${queueId} (${target?.customerName || ""}) นั่งโต๊ะ ${tableNum} เรียบร้อยแล้ว`
-    );
+    try {
+      // 1. ล็อคโต๊ะใน MySQL ทันทีเป็น OCCUPIED และเริ่มจับเวลา
+      await fetch("/api/tables", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tableNumber: String(tableNum),
+          status: "OCCUPIED",
+          action: "occupy",
+        }),
+      });
+
+      // 2. อัปเดตรายการคิวในระบบ
+      setQueues((prev) =>
+        prev.map((q) =>
+          q.id === queueId
+            ? { ...q, status: "seated", tableNumber: String(tableNum) }
+            : q
+        )
+      );
+
+      const target = queues.find((q) => q.id === queueId);
+      setSelectedQueueForTable(null);
+      setToastMessage(
+        `✅ จัดคิว ${queueId} (${target?.customerName || ""}) นั่งโต๊ะ ${tableNum} เรียบร้อยแล้ว (ล็อคโต๊ะ & เริ่มจับเวลาทันที)`
+      );
+
+      // 3. รีเฟรชผังร้านทันที เพื่อเปลี่ยนเป็นโต๊ะสีแดง
+      fetchFloorPlan();
+    } catch (err) {
+      console.error("Error assigning table for queue:", err);
+    }
   };
 
   // ยกเลิก / ข้ามคิว / สละสิทธิ์
@@ -498,6 +516,18 @@ export default function StaffPage() {
   const handleConfirmSeatReservation = async (reservationId, tableNum) => {
     if (!tableNum) return;
     try {
+      // 1. ล็อคโต๊ะใน MySQL ทันทีเป็น OCCUPIED และเริ่มจับเวลา
+      await fetch("/api/tables", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tableNumber: String(tableNum),
+          status: "OCCUPIED",
+          action: "occupy",
+        }),
+      });
+
+      // 2. บันทึกสถานะการจองเป็น seated
       const res = await fetch(`/api/reservations/${reservationId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -505,12 +535,28 @@ export default function StaffPage() {
       });
       if (res.ok) {
         const target = reservations.find((r) => r.id === reservationId || r.reservationId === reservationId);
-        setToastMessage(`✅ จัดโต๊ะ ${tableNum} ให้ คุณ ${target?.name || ""} เรียบร้อยแล้ว (เวลาจอง: ${target?.bookingTime || "เป๊ะๆ"} น.)`);
+        setToastMessage(`✅ จัดโต๊ะ ${tableNum} ให้ คุณ ${target?.name || ""} เรียบร้อยแล้ว (ล็อคโต๊ะ & เริ่มจับเวลาทันที)`);
         setSelectedReservationForTable(null);
         fetchReservations();
+        fetchFloorPlan();
       }
     } catch (err) {
       console.error("Error seating reservation:", err);
+    }
+  };
+
+  // เคลียร์โต๊ะให้ว่าง (เมื่อลูกค้าเช็คบิล/ลุกออกจากโต๊ะ)
+  const handleReleaseTable = async (tableNum) => {
+    try {
+      await fetch("/api/tables", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tableNumber: String(tableNum), action: "release" }),
+      });
+      setToastMessage(`🔄 เคลียร์โต๊ะ ${tableNum} ให้เป็นโต๊ะว่างเรียบร้อยแล้ว`);
+      fetchFloorPlan();
+    } catch (err) {
+      console.error("Error releasing table:", err);
     }
   };
 
@@ -1641,6 +1687,7 @@ export default function StaffPage() {
               layout={floorPlanLayout}
               isAdmin={false}
               onRefresh={fetchFloorPlan}
+              onReleaseTable={handleReleaseTable}
             />
           </div>
         )}

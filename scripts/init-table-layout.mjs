@@ -29,6 +29,10 @@ async function main() {
       await pool.query("ALTER TABLE dining_table ADD COLUMN zone VARCHAR(50) DEFAULT 'MAIN'");
       console.log('Added zone');
     }
+    if (!existingCols.includes('occupied_at')) {
+      await pool.query("ALTER TABLE dining_table ADD COLUMN occupied_at DATETIME NULL");
+      console.log('Added occupied_at');
+    }
 
     // 2. Create restaurant_layout table for blueprint metadata and landmarks
     await pool.query(`

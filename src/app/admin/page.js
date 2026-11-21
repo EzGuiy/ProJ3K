@@ -1395,6 +1395,19 @@ function TablesTab({ dbReady }) {
     fetchTables();
   };
 
+  const handleReleaseTable = async (tableNum) => {
+    try {
+      await fetch('/api/tables', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tableNumber: String(tableNum), action: 'release' }),
+      });
+      fetchTables();
+    } catch (err) {
+      console.error('Release table error:', err);
+    }
+  };
+
   const handleCreateTable = async (e) => {
     e.preventDefault();
     if (!newTableNumber.trim()) return;
@@ -1512,6 +1525,7 @@ function TablesTab({ dbReady }) {
           onSaveLayout={handleSaveLayout}
           onAddTable={() => setShowAddModal(true)}
           onRefresh={fetchTables}
+          onReleaseTable={handleReleaseTable}
         />
       ) : (
         /* Legacy Grid View Mode */

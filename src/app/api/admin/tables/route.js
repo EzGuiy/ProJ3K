@@ -13,6 +13,7 @@ export async function GET() {
         dt.table_name_or_number AS table_number,
         dt.status,
         dt.qr_token,
+        dt.occupied_at,
         COALESCE(dt.pos_x, 100) AS pos_x,
         COALESCE(dt.pos_y, 100) AS pos_y,
         COALESCE(dt.capacity, 4) AS capacity,
@@ -20,6 +21,7 @@ export async function GET() {
         COALESCE(dt.zone, 'MAIN') AS zone,
         o.order_id AS current_order_id,
         o.net_total AS current_order_total,
+        COALESCE(dt.occupied_at, o.created_at) AS session_start_at,
         o.created_at AS order_opened_at,
         (SELECT COUNT(*) FROM order_item oi WHERE oi.order_id = o.order_id) AS item_count
       FROM dining_table dt

@@ -116,6 +116,92 @@ function OrderPageContent() {
   const [showTracker, setShowTracker] = useState(false);
   const [newOrderSuccessId, setNewOrderSuccessId] = useState(null);
 
+  // ข้อมูลสถานะโต๊ะและเวลาเริ่มรับประทานอาหาร (จับเวลา Real-time)
+  const [tableStatus, setTableStatus] = useState("AVAILABLE");
+  const [sessionStartTime, setSessionStartTime] = useState(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  const fetchTableStatus = useCallback(async () => {
+    if (!tableNumber) return;
+    try {
+      const res = await fetch("/api/tables");
+      if (res.ok) {
+        const data = await res.json();
+        const tbl = (data.tables || []).find(
+          (t) => String(t.table_number) === String(tableNumber)
+        );
+        if (tbl) {
+          setTableStatus(tbl.status);
+          const start = tbl.session_start_at || tbl.occupied_at || tbl.order_opened_at;
+          setSessionStartTime(start || null);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching table status:", err);
+    }
+  }, [tableNumber]);
+
+  useEffect(() => {
+    if (!tableNumber) return;
+    fetchTableStatus();
+    const interval = setInterval(fetchTableStatus, 5000);
+    return () => clearInterval(interval);
+  }, [tableNumber, fetchTableStatus]);
+
+  // ตัวนับเวลาจริงทุก 1 วินาที
+  useEffect(() => {
+    if (!sessionStartTime) {
+      setElapsedSeconds(0);
+      return;
+    }
+    const tick = () => {
+      const startMs = new Date(sessionStartTime).getTime();
+      if (!isNaN(startMs)) {
+        const sec = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+        setElapsedSeconds(sec);
+      }
+    };
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [sessionStartTime]);
+
+  const formatTimerDuration = (sec) => {
+    const hrs = Math.floor(sec / 3600);
+    const mins = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    if (hrs > 0) {
+      return `${hrs}:${String(mins).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    }
+    return `${String(mins).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  };
+
+  // ลูกค้ากดปุ่ม "เริ่มสั่งอาหาร" (เริ่มจับเวลาและล็อคโต๊ะว่ามีคนแล้วทันที)
+  const handleStartOrderingSession = async () => {
+    if (!tableNumber) {
+      setShowTableModal(true);
+      return;
+    }
+    try {
+      const res = await fetch("/api/tables", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tableNumber,
+          action: "start_session",
+          status: "OCCUPIED",
+        }),
+      });
+      if (res.ok) {
+        setTableStatus("OCCUPIED");
+        setSessionStartTime(new Date().toISOString());
+        fetchTableStatus();
+      }
+    } catch (err) {
+      console.error("Error starting session:", err);
+    }
+  };
+
   // ดึงรายการออเดอร์ทั้งหมดของโต๊ะนี้ (ทั้งที่กำลังทำและเสิร์ฟแล้ว)
   const fetchTableOrders = useCallback(async () => {
     if (!tableNumber) return;
@@ -370,6 +456,7 @@ function OrderPageContent() {
         setCart([]);
         setNote("");
         await fetchTableOrders();
+        fetchTableStatus();
         setShowTracker(true);
       } else {
         setSubmitError(data.error || "ส่งออเดอร์ไม่สำเร็จ กรุณาลองอีกครั้ง");
@@ -434,6 +521,29 @@ function OrderPageContent() {
               </button>
             )}
 
+            {/* Live Dining Timer or Start Session Button */}
+            {tableNumber && (
+              tableStatus === "OCCUPIED" && sessionStartTime ? (
+                <div
+                  className="flex items-center gap-1.5 rounded-md border border-orange/50 bg-orange/15 px-3 py-1.5 text-xs font-mono font-bold text-orange shadow-sm animate-pulse"
+                  title={`เริ่มเวลา: ${new Date(sessionStartTime).toLocaleTimeString("th-TH")} น.`}
+                >
+                  <span className="size-2 rounded-full bg-orange animate-ping" />
+                  <span>⏱️ {formatTimerDuration(elapsedSeconds)}</span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleStartOrderingSession}
+                  className={`flex items-center gap-1.5 rounded-md bg-orange px-3 py-1.5 text-xs font-black text-[#0a0a0f] hover:brightness-110 shadow-lg shadow-orange/20 ${FOCUS}`}
+                  title="กดเพื่อเริ่มรับประทานและเริ่มจับเวลาทันที"
+                >
+                  <span>🍽️</span>
+                  <span>เริ่มสั่งอาหาร (เริ่มจับเวลา)</span>
+                </button>
+              )
+            )}
+
             {/* Status / Tracker Button */}
             {tableNumber && (
               <button
@@ -486,6 +596,40 @@ function OrderPageContent() {
           </div>
         </div>
       </header>
+
+      {/* ── Table Dining Session Banner ── */}
+      {tableNumber && (
+        tableStatus === "OCCUPIED" && sessionStartTime ? (
+          <div className="bg-glass border-b border-line px-4 py-2 text-xs text-ink-2 flex flex-wrap items-center justify-between gap-2 animate-fade-quick">
+            <div className="flex items-center gap-2">
+              <span className="text-orange font-bold">⏱️ โต๊ะนี้กำลังรับประทานอาหาร</span>
+              <span className="text-ink-3">•</span>
+              <span className="text-ink-3">เริ่มตั้งแต่เวลา {new Date(sessionStartTime).toLocaleTimeString("th-TH")} น.</span>
+              <span className="text-ink-3">•</span>
+              <span className="font-mono text-orange font-bold">รับประทานมาแล้ว {formatTimerDuration(elapsedSeconds)}</span>
+            </div>
+            <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded">
+              ● สถานะโต๊ะ: กำลังรับประทาน
+            </span>
+          </div>
+        ) : (
+          <div className="bg-orange/10 border-b border-orange/30 px-4 py-2.5 text-xs text-ink flex flex-wrap items-center justify-between gap-3 animate-fade-quick">
+            <div className="flex items-center gap-2">
+              <span className="text-base">👋</span>
+              <span>
+                <strong>ยินดีต้อนรับสู่โต๊ะ {tableNumber}!</strong> กดปุ่ม <strong>&quot;เริ่มสั่งอาหาร&quot;</strong> เพื่อเริ่มนับเวลารับประทานและล็อคโต๊ะ หรือเลือกอาหารในเมนูด้านล่างแล้วกดส่งออเดอร์ได้ทันที
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleStartOrderingSession}
+              className="shrink-0 rounded-md bg-orange px-3.5 py-1.5 text-xs font-bold text-[#0a0a0f] hover:brightness-110 shadow-md shadow-orange/20"
+            >
+              ▶️ เริ่มสั่งอาหาร (เริ่มจับเวลา)
+            </button>
+          </div>
+        )
+      )}
 
       <main className="mx-auto max-w-7xl">
         {/* Search */}

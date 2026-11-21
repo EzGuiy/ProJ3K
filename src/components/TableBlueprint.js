@@ -55,8 +55,7 @@ const DEFAULT_LANDMARKS = [
  * Interactive 2D floor plan / blueprint builder for restaurant dining tables.
  * - Admin Mode: Drag & Drop table positioning AND landmark positioning (Kitchen, Restroom, Cashier),
  *   while the Main Entrance remains fixed at the front. Grid snapping, save to MySQL database.
- *   Adding new tables preserves current unsaved drags.
- * - Staff Mode (Floor Plan View): Read-only visual floor plan with live table status (Available / Occupied).
+ * - Staff Mode (Floor Plan View): Read-only visual floor plan with live table status and real-time dining timer.
  * - Staff Selection Mode (Table Assignment): Clicking allows selecting AVAILABLE tables only.
  *   Occupied tables cannot be selected/clicked.
  */
@@ -72,6 +71,7 @@ export default function TableBlueprint({
   onAddTable = null,
   onRefresh = null,
   onTableClick = null,
+  onReleaseTable = null,
 }) {
   // Local working copy of tables and landmarks
   const [localTables, setLocalTables] = useState([]);
@@ -80,6 +80,13 @@ export default function TableBlueprint({
   const [hasChanges, setHasChanges] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Live timer tick for calculating dining duration in real time
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Dragging state: { targetType: 'table' | 'landmark', id: string, startMouseX, startMouseY, startX, startY }
   const [dragState, setDragState] = useState(null);
@@ -140,6 +147,21 @@ export default function TableBlueprint({
       if (updated) setActiveTableDetail(updated);
     }
   }, [localTables, activeTableDetail]);
+
+  // ── Helper: Format Elapsed Dining Time ──
+  const formatElapsed = (startTimeStr) => {
+    if (!startTimeStr) return null;
+    const start = new Date(startTimeStr).getTime();
+    if (isNaN(start)) return null;
+    const diffSec = Math.max(0, Math.floor((now - start) / 1000));
+    const hours = Math.floor(diffSec / 3600);
+    const mins = Math.floor((diffSec % 3600) / 60);
+    const secs = diffSec % 60;
+    if (hours > 0) {
+      return `${hours}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+    }
+    return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  };
 
   // ── Drag & Drop Handlers (Admin Only) ──
   const handleTablePointerDown = (e, table) => {
@@ -307,7 +329,7 @@ export default function TableBlueprint({
           <div className="flex items-center gap-2">
             <span className="size-2.5 rounded-full bg-[#ff4757] shadow-[0_0_8px_#ff4757]" />
             <span className="text-white/80">
-              {selectionMode ? "มีลูกค้า (กดไม่ได้)" : "มีลูกค้า"} ({occupiedCount})
+              {selectionMode ? "มีลูกค้าแล้ว (กดไม่ได้)" : "มีลูกค้า (จับเวลาอยู่)"} ({occupiedCount})
             </span>
           </div>
           <div className="text-white/40 border-l border-white/10 pl-3">
@@ -382,7 +404,7 @@ export default function TableBlueprint({
             /* Staff Mode Note */
             <div className="flex items-center gap-2">
               <span className="text-[11px] text-white/50 bg-white/5 px-2.5 py-1 rounded-md border border-white/5">
-                🔒 โหมดดูผังร้าน (เฉพาะ Admin เท่านั้นที่แก้ไขตำแหน่งได้)
+                🔒 โหมดดูผังร้าน (คลิกที่โต๊ะเพื่อดูเวลา/ออเดอร์)
               </span>
               {onRefresh && (
                 <button
@@ -560,6 +582,15 @@ export default function TableBlueprint({
             const width = isLarge ? 140 : 100;
             const height = 85;
 
+            // Elapsed dining duration
+            const elapsedTimer = isOccupied
+              ? formatElapsed(
+                  table.session_start_at ||
+                    table.occupied_at ||
+                    table.order_opened_at
+                )
+              : null;
+
             // Interaction styles depending on mode
             let cursorStyle = "pointer";
             if (isEditMode) {
@@ -602,7 +633,7 @@ export default function TableBlueprint({
                 title={
                   selectionMode && isOccupied
                     ? `โต๊ะ ${table.table_number} ไม่ว่าง (มีลูกค้าอยู่ - ไม่สามารถเลือกได้)`
-                    : `โต๊ะ ${table.table_number} (${isOccupied ? "มีลูกค้า" : "ว่าง"})`
+                    : `โต๊ะ ${table.table_number} (${isOccupied ? "มีลูกค้า - กำลังจับเวลา" : "ว่าง"})`
                 }
               >
                 {/* Chairs Visual Representation (Dots around table) */}
@@ -648,24 +679,30 @@ export default function TableBlueprint({
                       : "ว่าง"}
                   </span>
 
-                  {/* Price or selection prompt */}
+                  {/* Realtime Timer if Occupied, or Selection prompt if in selection mode */}
                   {selectionMode ? (
                     !isOccupied && !isSelected && (
                       <span className="text-[9px] text-[#2dd4a8] font-bold">
                         กดเลือก
                       </span>
                     )
-                  ) : isOccupied && table.current_order_total ? (
-                    <span className="text-[10px] font-mono font-bold text-[#ffb347]">
-                      ฿{Number(table.current_order_total).toLocaleString()}
-                    </span>
+                  ) : isOccupied ? (
+                    <div className="flex items-center gap-1 text-[10px] font-mono font-bold text-[#ffb347]" title="เวลารับประทานอาหารที่กำลังจับเวลา">
+                      <span>⏱️</span>
+                      <span>{elapsedTimer || "00:00"}</span>
+                    </div>
                   ) : null}
                 </div>
 
-                {/* Order Item Count if Occupied (View mode only) */}
-                {!selectionMode && isOccupied && table.item_count > 0 && (
-                  <div className="pointer-events-none text-[9px] text-white/50 text-right">
-                    {table.item_count} จาน
+                {/* Order Item Count or Total Amount if Occupied (View mode only) */}
+                {!selectionMode && isOccupied && (
+                  <div className="pointer-events-none flex items-center justify-between text-[9px] text-white/60">
+                    <span>{table.item_count > 0 ? `${table.item_count} จาน` : "เพิ่งเปิดโต๊ะ"}</span>
+                    {table.current_order_total ? (
+                      <span className="font-mono font-bold text-[#ffb347]">
+                        ฿{Number(table.current_order_total).toLocaleString()}
+                      </span>
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -725,10 +762,62 @@ export default function TableBlueprint({
                   }`}
                 >
                   {activeTableDetail.status === "OCCUPIED"
-                    ? "🍽️ มีลูกค้านั่งรับประทาน"
+                    ? "🍽️ มีลูกค้านั่งรับประทาน (กำลังจับเวลา)"
                     : "✅ โต๊ะว่าง พร้อมให้บริการ"}
                 </span>
               </div>
+
+              {/* Realtime Timer & Session duration (if occupied) */}
+              {activeTableDetail.status === "OCCUPIED" && (
+                <div className="p-3.5 rounded-xl bg-[#ffb347]/10 border border-[#ffb347]/30 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-xl">⏱️</span>
+                    <div>
+                      <div className="text-xs font-bold text-[#ffb347] flex items-center gap-1.5">
+                        <span>เวลารับประทานอาหาร:</span>
+                        <span className="font-mono text-sm font-black">
+                          {formatElapsed(
+                            activeTableDetail.session_start_at ||
+                              activeTableDetail.occupied_at ||
+                              activeTableDetail.order_opened_at
+                          ) || "00:00"}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-white/50 mt-0.5">
+                        เริ่มเมื่อ:{" "}
+                        {activeTableDetail.session_start_at ||
+                        activeTableDetail.occupied_at ||
+                        activeTableDetail.order_opened_at
+                          ? new Date(
+                              activeTableDetail.session_start_at ||
+                                activeTableDetail.occupied_at ||
+                                activeTableDetail.order_opened_at
+                            ).toLocaleTimeString("th-TH")
+                          : "เพิ่งเริ่ม"}{" "}
+                        น.
+                      </div>
+                    </div>
+                  </div>
+                  {onReleaseTable && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `ต้องการเคลียร์โต๊ะ ${activeTableDetail.table_number} ให้เป็นโต๊ะว่าง (สิ้นสุดเวลาทาน) ใช่หรือไม่?`
+                          )
+                        ) {
+                          onReleaseTable(activeTableDetail.table_number);
+                          setActiveTableDetail(null);
+                        }
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/40 text-xs font-bold transition"
+                    >
+                      เคลียร์โต๊ะให้ว่าง
+                    </button>
+                  )}
+                </div>
+              )}
 
               {/* Order Info (if occupied) */}
               {activeTableDetail.status === "OCCUPIED" ? (
@@ -736,7 +825,9 @@ export default function TableBlueprint({
                   <div className="flex items-center justify-between border-b border-white/5 pb-2">
                     <span className="text-white/50">Order ID:</span>
                     <span className="font-mono font-bold text-white">
-                      #{activeTableDetail.current_order_id?.slice(0, 8)}...
+                      {activeTableDetail.current_order_id
+                        ? `#${activeTableDetail.current_order_id.slice(0, 8)}...`
+                        : "ยังไม่ได้ส่งออเดอร์ (กำลังเลือกเมนู)"}
                     </span>
                   </div>
                   <div className="flex items-center justify-between border-b border-white/5 pb-2">
