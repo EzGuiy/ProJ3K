@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import styles from './admin.module.css';
+import TableBlueprint from '@/components/TableBlueprint';
 
 // ===== Tab definitions =====
 const TABS = [
@@ -1346,10 +1347,14 @@ function StaffTab({ dbReady }) {
 // ===== TABLES TAB =====
 function TablesTab({ dbReady }) {
   const [tables, setTables] = useState([]);
+  const [layout, setLayout] = useState(null);
+  const [viewMode, setViewMode] = useState('blueprint'); // 'blueprint' | 'grid'
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [newTableNumber, setNewTableNumber] = useState('');
+  const [newTableCapacity, setNewTableCapacity] = useState(4);
+  const [newTableShape, setNewTableShape] = useState('square');
   const [submitting, setSubmitting] = useState(false);
 
   const fetchTables = useCallback(async () => {
@@ -1362,6 +1367,7 @@ function TablesTab({ dbReady }) {
       const json = await res.json();
       if (res.ok) {
         setTables(json.tables || []);
+        if (json.layout) setLayout(json.layout);
       } else {
         setError(json.error || 'เกิดข้อผิดพลาด');
       }
@@ -1376,19 +1382,46 @@ function TablesTab({ dbReady }) {
     fetchTables();
   }, [fetchTables]);
 
+  const handleSaveLayout = async (updatedTables, layoutData) => {
+    const res = await fetch('/api/admin/tables', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tables: updatedTables, layout: layoutData }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'บันทึกผังโต๊ะไม่สำเร็จ');
+    }
+    fetchTables();
+  };
+
   const handleCreateTable = async (e) => {
     e.preventDefault();
     if (!newTableNumber.trim()) return;
     setSubmitting(true);
     try {
+      // คำนวณตำแหน่งเริ่มต้นไม่ให้ทับซ้อน (กระจายบน canvas)
+      const currentCount = tables.length;
+      const initialX = 100 + ((currentCount % 4) * 160);
+      const initialY = 140 + (Math.floor(currentCount / 4) * 110);
+
       const res = await fetch('/api/admin/tables', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ table_number: newTableNumber.trim() }),
+        body: JSON.stringify({
+          table_number: newTableNumber.trim(),
+          capacity: Number(newTableCapacity) || 4,
+          shape: newTableShape,
+          pos_x: initialX,
+          pos_y: initialY,
+          zone: 'MAIN',
+        }),
       });
       if (res.ok) {
         setShowAddModal(false);
         setNewTableNumber('');
+        setNewTableCapacity(4);
+        setNewTableShape('square');
         fetchTables();
       } else {
         const errJson = await res.json();
@@ -1411,8 +1444,48 @@ function TablesTab({ dbReady }) {
   return (
     <div className={styles.tabContent}>
       <div className={styles.tabHeader}>
-        <h1 className={styles.tabTitle}>🪑 สถานะโต๊ะอาหาร</h1>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <h1 className={styles.tabTitle}>🪑 จัดผังร้าน & สถานะโต๊ะอาหาร</h1>
+        </div>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {/* View Mode Toggle */}
+          <div style={{ display: 'flex', background: 'rgba(255,255,255,0.06)', borderRadius: '8px', padding: '3px', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <button
+              type="button"
+              onClick={() => setViewMode('blueprint')}
+              style={{
+                padding: '5px 12px',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                borderRadius: '6px',
+                background: viewMode === 'blueprint' ? 'var(--accent-orange)' : 'transparent',
+                color: viewMode === 'blueprint' ? '#0a0a0f' : 'var(--text-secondary)',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              🗺️ ผังโต๊ะ Blueprint
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('grid')}
+              style={{
+                padding: '5px 12px',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                borderRadius: '6px',
+                background: viewMode === 'grid' ? 'var(--accent-orange)' : 'transparent',
+                color: viewMode === 'grid' ? '#0a0a0f' : 'var(--text-secondary)',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              📋 การ์ดตาราง (Grid)
+            </button>
+          </div>
+
           <button
             className={styles.refreshBtn}
             style={{ background: 'var(--accent-orange)', color: '#0a0a0f', fontWeight: 600 }}
@@ -1430,34 +1503,50 @@ function TablesTab({ dbReady }) {
         <span className={styles.tableStatTotal}>📍 ทั้งหมด {tables.length}</span>
       </div>
 
-      <div className={styles.tableGrid}>
-        {tables.length > 0 ? (
-          tables.map((table) => (
-            <div
-              key={table.table_id}
-              className={`${styles.tableCard} ${table.status === 'OCCUPIED' ? styles.tableOccupied : styles.tableAvailable}`}
-            >
-              <div className={styles.tableCardHeader}>
-                <span className={styles.tableNumber}>โต๊ะ {table.table_number}</span>
-                <span className={`${styles.statusDot} ${table.status === 'AVAILABLE' ? styles.dotGreen : styles.dotRed}`}></span>
-              </div>
-              <div className={styles.tableCardBody}>
-                <span className={styles.tableStatus}>
-                  {table.status === 'AVAILABLE' ? '✅ ว่าง' : '🍽️ มีลูกค้า'}
-                </span>
-                {table.current_order_id && (
-                  <div className={styles.tableOrderInfo}>
-                    <span>{table.item_count || 0} รายการ</span>
-                    <span>฿{Number(table.current_order_total || 0).toLocaleString()}</span>
+      {/* Blueprint View Mode (Default & Drag-and-Drop) */}
+      {viewMode === 'blueprint' ? (
+        <TableBlueprint
+          tables={tables}
+          layout={layout}
+          isAdmin={true}
+          onSaveLayout={handleSaveLayout}
+          onAddTable={() => setShowAddModal(true)}
+          onRefresh={fetchTables}
+        />
+      ) : (
+        /* Legacy Grid View Mode */
+        <div className={styles.tableGrid}>
+          {tables.length > 0 ? (
+            tables.map((table) => (
+              <div
+                key={table.table_id}
+                className={`${styles.tableCard} ${table.status === 'OCCUPIED' ? styles.tableOccupied : styles.tableAvailable}`}
+              >
+                <div className={styles.tableCardHeader}>
+                  <span className={styles.tableNumber}>โต๊ะ {table.table_number}</span>
+                  <span className={`${styles.statusDot} ${table.status === 'AVAILABLE' ? styles.dotGreen : styles.dotRed}`}></span>
+                </div>
+                <div className={styles.tableCardBody}>
+                  <span className={styles.tableStatus}>
+                    {table.status === 'AVAILABLE' ? '✅ ว่าง' : '🍽️ มีลูกค้า'}
+                  </span>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                    ความจุ: {table.capacity || 4} ที่นั่ง • X:{table.pos_x} Y:{table.pos_y}
                   </div>
-                )}
+                  {table.current_order_id && (
+                    <div className={styles.tableOrderInfo}>
+                      <span>{table.item_count || 0} รายการ</span>
+                      <span>฿{Number(table.current_order_total || 0).toLocaleString()}</span>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ))
-        ) : (
-          <p className={styles.emptyText}>ยังไม่มีข้อมูลโต๊ะในฐานข้อมูล</p>
-        )}
-      </div>
+            ))
+          ) : (
+            <p className={styles.emptyText}>ยังไม่มีข้อมูลโต๊ะในฐานข้อมูล</p>
+          )}
+        </div>
+      )}
 
       {/* Modal เพิ่มโต๊ะใหม่ */}
       {showAddModal && (
@@ -1481,6 +1570,41 @@ function TablesTab({ dbReady }) {
                   onChange={(e) => setNewTableNumber(e.target.value)}
                   placeholder="เช่น 11 หรือ VIP-1"
                 />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.4rem', color: 'var(--text-secondary)' }}>
+                    จำนวนที่นั่ง (Capacity)
+                  </label>
+                  <select
+                    className={styles.filterSelect}
+                    style={{ width: '100%' }}
+                    value={newTableCapacity}
+                    onChange={(e) => setNewTableCapacity(Number(e.target.value))}
+                  >
+                    <option value={2}>2 ที่นั่ง (โต๊ะเล็ก)</option>
+                    <option value={4}>4 ที่นั่ง (มาตรฐาน)</option>
+                    <option value={6}>6 ที่นั่ง (โต๊ะใหญ่)</option>
+                    <option value={8}>8 ที่นั่ง (โต๊ะรวม)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.4rem', color: 'var(--text-secondary)' }}>
+                    รูปร่างโต๊ะ
+                  </label>
+                  <select
+                    className={styles.filterSelect}
+                    style={{ width: '100%' }}
+                    value={newTableShape}
+                    onChange={(e) => setNewTableShape(e.target.value)}
+                  >
+                    <option value="square">สี่เหลี่ยมจัตุรัส</option>
+                    <option value="rectangle">สี่เหลี่ยมผืนผ้า</option>
+                    <option value="round">ทรงกลม</option>
+                  </select>
+                </div>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '0.5rem' }}>

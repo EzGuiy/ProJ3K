@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import TableBlueprint from "@/components/TableBlueprint";
 
 /* ---------- Shared design constants (mirrors order/page.js) ---------- */
 
@@ -244,6 +245,10 @@ export default function StaffPage() {
   const [selectedReservationForTable, setSelectedReservationForTable] = useState(null);
   const [reservationTableNumber, setReservationTableNumber] = useState("1");
 
+  // สถานะสำหรับผังร้าน (Floor Plan Blueprint)
+  const [floorPlanTables, setFloorPlanTables] = useState([]);
+  const [floorPlanLayout, setFloorPlanLayout] = useState(null);
+
   // ซ่อน Toast แจ้งเตือนอัตโนมัติ
   useEffect(() => {
     if (!toastMessage) return;
@@ -274,15 +279,28 @@ export default function StaffPage() {
     }
   }, []);
 
+  const fetchFloorPlan = useCallback(async () => {
+    try {
+      const response = await fetch("/api/tables");
+      const data = await response.json();
+      if (data.tables) setFloorPlanTables(data.tables);
+      if (data.layout) setFloorPlanLayout(data.layout);
+    } catch (error) {
+      console.error("Error fetching floor plan:", error);
+    }
+  }, []);
+
   useEffect(() => {
     fetchOrders();
     fetchReservations();
+    fetchFloorPlan();
     const interval = setInterval(() => {
       fetchOrders();
       fetchReservations();
+      fetchFloorPlan();
     }, 5000); // Auto-refresh every 5 seconds
     return () => clearInterval(interval);
-  }, [fetchOrders, fetchReservations]);
+  }, [fetchOrders, fetchReservations, fetchFloorPlan]);
 
   const handleStatusChange = async (orderId, newStatus) => {
     try {
@@ -619,7 +637,9 @@ export default function StaffPage() {
                   ? "ระบบจัดการออเดอร์"
                   : activeNav === "queue"
                   ? "ระบบจัดการคิวลูกค้า (QR Code)"
-                  : "ระบบคิวจองโต๊ะล่วงหน้า (ตามเวลาเป๊ะๆ)"}
+                  : activeNav === "reservations"
+                  ? "ระบบคิวจองโต๊ะล่วงหน้า (ตามเวลาเป๊ะๆ)"
+                  : "ผังร้าน & สถานะโต๊ะอาหาร (Floor Plan)"}
               </h1>
               <p className="mt-0.5 text-xs text-ink-3">
                 อัพเดทล่าสุด: {formatTime(lastRefresh)}
@@ -689,6 +709,28 @@ export default function StaffPage() {
                     : "bg-orange/20 text-orange"
                 }`}>
                   รอ {reservationCounts.confirmed}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveNav("floorplan")}
+              className={`flex items-center gap-2 rounded-md px-3.5 py-1.5 text-xs font-semibold transition ${FOCUS} ${
+                activeNav === "floorplan"
+                  ? "bg-orange text-[#0a0a0f] shadow-sm font-bold"
+                  : "text-ink-2 hover:text-ink"
+              }`}
+            >
+              <span>🗺️</span>
+              <span>ผังร้าน</span>
+              {floorPlanTables.length > 0 && (
+                <span className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
+                  activeNav === "floorplan"
+                    ? "bg-black/20 text-[#0a0a0f]"
+                    : "bg-glass text-ink-3"
+                }`}>
+                  {floorPlanTables.filter((t) => t.status === "OCCUPIED").length}/{floorPlanTables.length} โต๊ะ
                 </span>
               )}
             </button>
@@ -1557,6 +1599,31 @@ export default function StaffPage() {
                 })}
               </ul>
             )}
+          </div>
+        )}
+
+        {/* ============================================================== */}
+        {/* VIEW 4: ผังร้าน & ตำแหน่งโต๊ะอาหาร (FLOOR PLAN VIEW)          */}
+        {/* ============================================================== */}
+        {activeNav === "floorplan" && (
+          <div className="p-4 md:p-6 animate-fade-quick">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-bold text-ink flex items-center gap-2">
+                  <span>🗺️</span> ผังร้านและสถานะโต๊ะอาหารปัจจุบัน
+                </h2>
+                <p className="text-xs text-ink-3 mt-1">
+                  มุมมองผังร้านแบบเรียลไทม์ (โหมดดูอย่างเดียว - แอดมินเป็นผู้จัดตำแหน่งโต๊ะ) คลิกที่โต๊ะเพื่อดูรายละเอียดสถานะและออเดอร์
+                </p>
+              </div>
+            </div>
+
+            <TableBlueprint
+              tables={floorPlanTables}
+              layout={floorPlanLayout}
+              isAdmin={false}
+              onRefresh={fetchFloorPlan}
+            />
           </div>
         )}
       </main>
