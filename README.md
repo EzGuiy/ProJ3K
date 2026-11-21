@@ -270,6 +270,9 @@ cd ProJ3K
 
 # ติดตั้ง Dependencies
 npm install
+
+# ตั้งค่า column และตารางสำหรับผังโต๊ะ (ทำครั้งเดียวหลังตั้งค่า .env.local)
+node scripts/init-table-layout.mjs
 ```
 
 ### 3. รันเซิร์ฟเวอร์สำหรับการพัฒนา (Run Development Server)
@@ -291,6 +294,7 @@ npm run dev
 | `/staff` | 🧑‍💼 พนักงาน | **Staff Portal:** ตรวจสอบสถานะออเดอร์ทุกโต๊ะ จัดการโต๊ะ เปิดโต๊ะ และรับออเดอร์สำรองในโหมดฉุกเฉิน |
 | `/chef` | 👨‍🍳 เชฟ | **Kitchen Display System (KDS):** หน้าจอห้องครัวสำหรับเชฟ จัดคิวปรุงอาหาร อัปเดตสถานะ PENDING → COOKING → READY |
 | `/admin` | 📋 ผู้ดูแลระบบ | **Admin Panel:** Dashboard ภาพรวมร้าน, บริหารจัดการเมนู CRUD, ดูประวัติคำสั่งซื้อและรายงานสรุป |
+| `/admin/blueprint` | 📋 ผู้ดูแลระบบ | **ผังร้าน:** จัดตำแหน่งโต๊ะและจุดสำคัญภายในร้าน |
 
 ---
 

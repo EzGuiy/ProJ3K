@@ -2,8 +2,10 @@ import dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
 
 async function main() {
+  let pool;
   try {
-    const { default: pool } = await import('../src/lib/db.js');
+    const { default: dbPool } = await import('../frontend/src/lib/db.js');
+    pool = dbPool;
 
     // 1. Check and add columns to dining_table
     const [cols] = await pool.query('DESCRIBE dining_table');
@@ -69,7 +71,7 @@ async function main() {
     // 4. Set initial clean positions for tables 1-10 if they are all at 0 or 50
     const [tables] = await pool.query('SELECT table_id, table_name_or_number, pos_x, pos_y FROM dining_table ORDER BY CAST(table_name_or_number AS UNSIGNED) ASC');
     const allAtInitial = tables.every((t) => t.pos_x === 0 || t.pos_x === 50 || t.pos_x == null);
-    
+
     if (allAtInitial) {
       console.log('Seeding initial blueprint coordinates for tables...');
       // 2 columns of tables:
@@ -109,8 +111,16 @@ async function main() {
     console.log('dining_table columns now:', finalCols.map((c) => c.Field));
   } catch (err) {
     console.error('Error in init-table-layout:', err);
+    process.exitCode = 1;
   } finally {
-    process.exit(0);
+    if (pool) {
+      try {
+        await pool.end();
+      } catch (err) {
+        console.error('Error closing database pool:', err);
+        process.exitCode = 1;
+      }
+    }
   }
 }
 
