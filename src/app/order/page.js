@@ -3,6 +3,7 @@
 
 import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import PromptPayModal from "@/components/PromptPayModal";
 
 /* ---------- Shared bits ---------- */
 
@@ -115,6 +116,7 @@ function OrderPageContent() {
   const [tableOrders, setTableOrders] = useState([]);
   const [showTracker, setShowTracker] = useState(false);
   const [newOrderSuccessId, setNewOrderSuccessId] = useState(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   // ข้อมูลสถานะโต๊ะและเวลาเริ่มรับประทานอาหาร (จับเวลา Real-time)
   const [tableStatus, setTableStatus] = useState("AVAILABLE");
@@ -252,6 +254,9 @@ function OrderPageContent() {
   const tableUnservedCount = unservedItems.reduce((sum, it) => sum + (it.quantity || 1), 0);
   const tableServedCount = servedItems.reduce((sum, it) => sum + (it.quantity || 1), 0);
   const tableTotalItemsCount = tableUnservedCount + tableServedCount;
+  const tableTotalAmount = useMemo(() => {
+    return tableOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+  }, [tableOrders]);
 
   // ล็อกและจดจำหมายเลขโต๊ะสำหรับเครื่อง POS นี้โดยอัตโนมัติ
   useEffect(() => {
@@ -566,6 +571,21 @@ function OrderPageContent() {
                     ✓ เสิร์ฟครบ
                   </span>
                 ) : null}
+              </button>
+            )}
+
+            {/* Quick PromptPay Payment Button */}
+            {tableNumber && tableTotalAmount > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowPaymentModal(true)}
+                className={`flex items-center gap-1.5 rounded-md border border-blue-500/40 bg-blue-500/15 px-3 py-1.5 text-xs font-bold text-blue-300 hover:bg-blue-500/25 transition shadow-sm ${FOCUS}`}
+                title="สแกนจ่ายพร้อมเพย์ล็อคยอดเงิน"
+              >
+                <span>💳 จ่ายเงิน</span>
+                <span className="font-extrabold text-white">
+                  ฿{tableTotalAmount.toLocaleString()}
+                </span>
               </button>
             )}
 
@@ -1254,6 +1274,18 @@ function OrderPageContent() {
                 </span>
               </div>
               <div className="flex items-center gap-2">
+                {tableTotalAmount > 0 && (
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 rounded-md bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 px-4 py-2.5 text-sm font-bold text-white shadow-md hover:brightness-110 transition cursor-pointer"
+                    onClick={() => setShowPaymentModal(true)}
+                  >
+                    <span>💳 ชำระเงินพร้อมเพย์</span>
+                    <span className="font-mono text-amber-300 font-extrabold">
+                      (฿{tableTotalAmount.toLocaleString()})
+                    </span>
+                  </button>
+                )}
                 <button
                   type="button"
                   className="rounded-md border border-line px-4 py-2.5 text-sm font-medium text-ink-2 hover:bg-glass hover:text-ink"
@@ -1341,6 +1373,21 @@ function OrderPageContent() {
           </div>
         </div>
       )}
+
+      {/* Modal ชำระเงินผ่านพร้อมเพย์ ล็อคยอดอัตโนมัติ */}
+      <PromptPayModal
+        isOpen={showPaymentModal}
+        onClose={() => setShowPaymentModal(false)}
+        orderId={orderId || tableOrders[0]?.id || tableOrders[0]?.order_id}
+        tableNumber={tableNumber}
+        amount={tableTotalAmount}
+        customerName={tableOrders[0]?.customerName || (tableNumber ? `ลูกค้าโต๊ะ ${tableNumber}` : "ลูกค้าทั่วไป")}
+        isStaff={false}
+        onPaymentSuccess={async () => {
+          await fetchTableOrders();
+          fetchTableStatus();
+        }}
+      />
     </div>
   );
 }

@@ -72,6 +72,7 @@ export default function TableBlueprint({
   onRefresh = null,
   onTableClick = null,
   onReleaseTable = null,
+  onOpenPayment = null,
 }) {
   // Local working copy of tables and landmarks
   const [localTables, setLocalTables] = useState([]);
@@ -842,6 +843,27 @@ export default function TableBlueprint({
                       ฿{Number(activeTableDetail.current_order_total || 0).toLocaleString()}
                     </span>
                   </div>
+
+                  {/* Payment Button */}
+                  {onOpenPayment && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onOpenPayment({
+                          tableNumber: activeTableDetail.table_number,
+                          orderId: activeTableDetail.current_order_id,
+                          amount: Number(activeTableDetail.current_order_total || 0),
+                        });
+                        setActiveTableDetail(null);
+                      }}
+                      className="mt-2 w-full py-2.5 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:brightness-110 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg transition cursor-pointer"
+                    >
+                      <span>💳 รับชำระเงินผ่านพร้อมเพย์</span>
+                      <span className="font-mono font-black text-amber-300">
+                        (฿{Number(activeTableDetail.current_order_total || 0).toLocaleString()})
+                      </span>
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="p-4 rounded-xl bg-[#2dd4a8]/5 border border-[#2dd4a8]/20 text-xs text-[#2dd4a8] text-center">

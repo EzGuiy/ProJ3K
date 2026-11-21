@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import TableBlueprint from "@/components/TableBlueprint";
+import PromptPayModal from "@/components/PromptPayModal";
 
 /* ---------- Shared design constants (mirrors order/page.js) ---------- */
 
@@ -229,6 +230,7 @@ export default function StaffPage() {
   const [showQrModal, setShowQrModal] = useState(false);
   const [selectedQueueForTable, setSelectedQueueForTable] = useState(null);
   const [selectedTableNumber, setSelectedTableNumber] = useState("1");
+  const [paymentModalData, setPaymentModalData] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
   const [newQueueForm, setNewQueueForm] = useState({
     customerName: "",
@@ -1080,9 +1082,29 @@ export default function StaffPage() {
 
                       {/* Actions */}
                       <div
-                        className="flex gap-2.5 border-t border-line pt-3"
+                        className="flex flex-wrap items-center gap-2.5 border-t border-line pt-3"
                         onClick={(e) => e.stopPropagation()}
                       >
+                        {/* ปุ่มรับชำระเงินพร้อมเพย์ */}
+                        <button
+                          type="button"
+                          className={`flex items-center gap-1.5 rounded-md border border-blue-500/40 bg-blue-500/15 px-3 py-2 text-[0.82rem] font-bold text-blue-300 transition hover:bg-blue-500/25 hover:border-blue-400 ${FOCUS}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPaymentModalData({
+                              orderId: order.order_id,
+                              tableNumber: order.tableNumber !== "-" ? order.tableNumber : null,
+                              amount: order.totalAmount,
+                              customerName: order.customerName,
+                            });
+                          }}
+                          title="เปิด QR Code สแกนจ่ายพร้อมเพย์ล็อคยอด"
+                        >
+                          <span>💳 รับชำระพร้อมเพย์</span>
+                          <span className="font-mono font-extrabold text-white">
+                            ฿{order.totalAmount?.toLocaleString()}
+                          </span>
+                        </button>
                         {/* ปุ่มเสิร์ฟรายการที่พร้อมทั้งหมด */}
                         {order.readyCount > 0 && (
                           <button
@@ -1688,6 +1710,7 @@ export default function StaffPage() {
               isAdmin={false}
               onRefresh={fetchFloorPlan}
               onReleaseTable={handleReleaseTable}
+              onOpenPayment={(data) => setPaymentModalData(data)}
             />
           </div>
         )}
@@ -2030,6 +2053,22 @@ export default function StaffPage() {
           </div>
         </div>
       )}
+
+      {/* Modal ชำระเงินผ่านพร้อมเพย์ (Staff Mode) */}
+      <PromptPayModal
+        isOpen={!!paymentModalData}
+        onClose={() => setPaymentModalData(null)}
+        orderId={paymentModalData?.orderId}
+        tableNumber={paymentModalData?.tableNumber}
+        amount={paymentModalData?.amount || 0}
+        customerName={paymentModalData?.customerName || "ลูกค้าทั่วไป"}
+        isStaff={true}
+        onPaymentSuccess={async (payment) => {
+          setToastMessage(`✅ รับชำระเงิน ฿${payment.amount?.toLocaleString()} สำเร็จแล้ว (โต๊ะ ${payment.tableNumber || "-"})`);
+          fetchOrders();
+          fetchFloorPlan();
+        }}
+      />
 
     </div>
   );
