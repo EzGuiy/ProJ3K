@@ -3,47 +3,135 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
 /**
+ * Default Landmarks configuration for the restaurant blueprint.
+ * Entrance (หน้าร้าน) is fixed. Kitchen, Restroom, Cashier are draggable in Admin Edit Mode.
+ */
+const DEFAULT_LANDMARKS = [
+  {
+    id: "lm-entrance",
+    type: "ENTRANCE",
+    label: "ทางเข้าร้าน (ฝั่งหน้าร้าน)",
+    subLabel: "▲ MAIN ENTRANCE / FRONT OF RESTAURANT ▲",
+    x: 260,
+    y: 540,
+    width: 420,
+    height: 70,
+  },
+  {
+    id: "lm-kitchen",
+    type: "KITCHEN",
+    label: "🍳 ครัวหลัก & จุดรับอาหาร",
+    subLabel: "KITCHEN & PICKUP",
+    x: 300,
+    y: 18,
+    width: 340,
+    height: 48,
+  },
+  {
+    id: "lm-restroom",
+    type: "RESTROOM",
+    label: "🚻 ห้องน้ำ",
+    subLabel: "RESTROOM",
+    x: 25,
+    y: 18,
+    width: 120,
+    height: 48,
+  },
+  {
+    id: "lm-cashier",
+    type: "CASHIER",
+    label: "💵 แคชเชียร์ & บาร์น้ำ",
+    subLabel: "CASHIER & BAR",
+    x: 710,
+    y: 490,
+    width: 190,
+    height: 65,
+  },
+];
+
+/**
  * TableBlueprint Component
- * 
+ *
  * Interactive 2D floor plan / blueprint builder for restaurant dining tables.
- * - Admin Mode: Drag & Drop table positioning, grid snapping, save to MySQL database.
- * - Staff Mode: Read-only visual floor plan with live table status (Available / Occupied).
- * - Clearly indicates where the "หน้าร้าน / ทางเข้าร้าน" (Main Entrance) is located.
- * - Clicking a table displays current order and table status.
+ * - Admin Mode: Drag & Drop table positioning AND landmark positioning (Kitchen, Restroom, Cashier),
+ *   while the Main Entrance remains fixed at the front. Grid snapping, save to MySQL database.
+ *   Adding new tables preserves current unsaved drags.
+ * - Staff Mode (Floor Plan View): Read-only visual floor plan with live table status (Available / Occupied).
+ * - Staff Selection Mode (Table Assignment): Clicking allows selecting AVAILABLE tables only.
+ *   Occupied tables cannot be selected/clicked.
  */
 export default function TableBlueprint({
   tables = [],
   layout = null,
   isAdmin = false,
+  selectionMode = false,
+  selectedTableNumber = null,
+  selectedTableId = null,
+  onSelectTable = null,
   onSaveLayout = null,
   onAddTable = null,
   onRefresh = null,
   onTableClick = null,
-  selectedTableId = null,
 }) {
-  // Local working copy of tables for dragging
+  // Local working copy of tables and landmarks
   const [localTables, setLocalTables] = useState([]);
+  const [localLandmarks, setLocalLandmarks] = useState(DEFAULT_LANDMARKS);
   const [isEditMode, setIsEditMode] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  // Dragging state
-  const [dragState, setDragState] = useState(null); // { tableId, startMouseX, startMouseY, startTableX, startTableY }
+  // Dragging state: { targetType: 'table' | 'landmark', id: string, startMouseX, startMouseY, startX, startY }
+  const [dragState, setDragState] = useState(null);
   const canvasRef = useRef(null);
 
-  // Detail Modal state when clicking a table
+  // Detail Modal state when clicking a table (View mode only)
   const [activeTableDetail, setActiveTableDetail] = useState(null);
 
   // Canvas dimensions
   const canvasWidth = layout?.width || 940;
   const canvasHeight = layout?.height || 640;
 
-  // Sync tables from props
+  // ── Sync tables from props without wiping out unsaved drags ──
   useEffect(() => {
-    setLocalTables(tables.map((t) => ({ ...t })));
-    setHasChanges(false);
+    setLocalTables((prevLocal) => {
+      if (!prevLocal || prevLocal.length === 0) {
+        return tables.map((t) => ({ ...t }));
+      }
+      // Preserve positions already dragged in this session
+      return tables.map((incoming) => {
+        const match = prevLocal.find((lt) => lt.table_id === incoming.table_id);
+        if (match) {
+          return {
+            ...incoming,
+            pos_x: match.pos_x,
+            pos_y: match.pos_y,
+          };
+        }
+        // Newly added table
+        return { ...incoming };
+      });
+    });
   }, [tables]);
+
+  // ── Sync landmarks from props without wiping out unsaved drags ──
+  useEffect(() => {
+    const incoming =
+      layout?.landmarks && Array.isArray(layout.landmarks) && layout.landmarks.length > 0
+        ? layout.landmarks
+        : DEFAULT_LANDMARKS;
+
+    setLocalLandmarks((prev) => {
+      if (!prev || prev.length === 0) return incoming;
+      return incoming.map((lm) => {
+        const match = prev.find((p) => p.id === lm.id);
+        if (match) {
+          return { ...lm, x: match.x, y: match.y };
+        }
+        return lm;
+      });
+    });
+  }, [layout]);
 
   // Keep activeTableDetail in sync if tables reload
   useEffect(() => {
@@ -51,20 +139,39 @@ export default function TableBlueprint({
       const updated = localTables.find((t) => t.table_id === activeTableDetail.table_id);
       if (updated) setActiveTableDetail(updated);
     }
-  }, [localTables]);
+  }, [localTables, activeTableDetail]);
 
   // ── Drag & Drop Handlers (Admin Only) ──
-  const handlePointerDown = (e, table) => {
-    if (!isAdmin || !isEditMode) return;
+  const handleTablePointerDown = (e, table) => {
+    if (!isAdmin || !isEditMode || selectionMode) return;
     e.preventDefault();
     e.stopPropagation();
 
     setDragState({
-      tableId: table.table_id,
+      targetType: "table",
+      id: table.table_id,
       startMouseX: e.clientX,
       startMouseY: e.clientY,
-      startTableX: Number(table.pos_x) || 0,
-      startTableY: Number(table.pos_y) || 0,
+      startX: Number(table.pos_x) || 0,
+      startY: Number(table.pos_y) || 0,
+    });
+  };
+
+  const handleLandmarkPointerDown = (e, lm) => {
+    if (!isAdmin || !isEditMode || selectionMode) return;
+    // Front entrance is FIXED and cannot be moved!
+    if (lm.type === "ENTRANCE" || lm.id === "lm-entrance") return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    setDragState({
+      targetType: "landmark",
+      id: lm.id,
+      startMouseX: e.clientX,
+      startMouseY: e.clientY,
+      startX: Number(lm.x) || 0,
+      startY: Number(lm.y) || 0,
     });
   };
 
@@ -75,22 +182,40 @@ export default function TableBlueprint({
       const deltaX = e.clientX - dragState.startMouseX;
       const deltaY = e.clientY - dragState.startMouseY;
 
-      // Snap to 10px grid
-      let newX = Math.round((dragState.startTableX + deltaX) / 10) * 10;
-      let newY = Math.round((dragState.startTableY + deltaY) / 10) * 10;
+      if (dragState.targetType === "table") {
+        // Snap to 10px grid
+        let newX = Math.round((dragState.startX + deltaX) / 10) * 10;
+        let newY = Math.round((dragState.startY + deltaY) / 10) * 10;
 
-      // Clamp within canvas boundaries (margin of 20px)
-      newX = Math.max(20, Math.min(canvasWidth - 140, newX));
-      newY = Math.max(80, Math.min(canvasHeight - 160, newY));
+        // Clamp within canvas boundaries
+        newX = Math.max(10, Math.min(canvasWidth - 140, newX));
+        newY = Math.max(10, Math.min(canvasHeight - 110, newY));
 
-      setLocalTables((prev) =>
-        prev.map((t) =>
-          t.table_id === dragState.tableId ? { ...t, pos_x: newX, pos_y: newY } : t
-        )
-      );
-      setHasChanges(true);
+        setLocalTables((prev) =>
+          prev.map((t) =>
+            t.table_id === dragState.id ? { ...t, pos_x: newX, pos_y: newY } : t
+          )
+        );
+        setHasChanges(true);
+      } else if (dragState.targetType === "landmark") {
+        const lm = localLandmarks.find((l) => l.id === dragState.id);
+        const w = lm?.width || 160;
+        const h = lm?.height || 50;
+
+        let newX = Math.round((dragState.startX + deltaX) / 10) * 10;
+        let newY = Math.round((dragState.startY + deltaY) / 10) * 10;
+
+        // Clamp landmark within canvas
+        newX = Math.max(10, Math.min(canvasWidth - w - 10, newX));
+        newY = Math.max(10, Math.min(canvasHeight - h - 10, newY));
+
+        setLocalLandmarks((prev) =>
+          prev.map((l) => (l.id === dragState.id ? { ...l, x: newX, y: newY } : l))
+        );
+        setHasChanges(true);
+      }
     },
-    [dragState, canvasWidth, canvasHeight]
+    [dragState, canvasWidth, canvasHeight, localLandmarks]
   );
 
   const handlePointerUp = useCallback(() => {
@@ -115,27 +240,48 @@ export default function TableBlueprint({
     if (!onSaveLayout) return;
     setSaving(true);
     try {
-      await onSaveLayout(localTables, layout);
+      const updatedLayout = {
+        ...(layout || {}),
+        landmarks: localLandmarks,
+      };
+      await onSaveLayout(localTables, updatedLayout);
       setHasChanges(false);
       setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      setTimeout(() => setSaveSuccess(false), 3500);
     } catch (err) {
       console.error("Save error:", err);
-      alert("บันทึกตำแหน่งโต๊ะไม่สำเร็จ");
+      alert("บันทึกตำแหน่งโต๊ะและผังร้านไม่สำเร็จ");
     } finally {
       setSaving(false);
     }
   };
 
-  // ── Reset to original ──
+  // ── Reset to original DB values ──
   const handleReset = () => {
     setLocalTables(tables.map((t) => ({ ...t })));
+    setLocalLandmarks(
+      layout?.landmarks && Array.isArray(layout.landmarks) && layout.landmarks.length > 0
+        ? layout.landmarks
+        : DEFAULT_LANDMARKS
+    );
     setHasChanges(false);
   };
 
-  // ── Table Click ──
-  const handleTableClick = (table) => {
+  // ── Table Click Handler ──
+  const handleTableClick = (table, isOccupied) => {
     if (isEditMode) return; // In edit mode, clicking is for dragging
+
+    // ── Staff Selection Mode ──
+    if (selectionMode) {
+      // If table is occupied, it cannot be clicked at all!
+      if (isOccupied) return;
+      if (onSelectTable) {
+        onSelectTable(table);
+      }
+      return;
+    }
+
+    // ── Normal View Mode ──
     if (onTableClick) {
       onTableClick(table);
     } else {
@@ -147,18 +293,22 @@ export default function TableBlueprint({
   const occupiedCount = localTables.filter((t) => t.status === "OCCUPIED").length;
 
   return (
-    <div className="w-full flex flex-col gap-4">
+    <div className="w-full flex flex-col gap-3">
       {/* ── Toolbar & Control Header ── */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-md">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-3 md:p-4 backdrop-blur-md">
         {/* Status Indicators & Counts */}
-        <div className="flex flex-wrap items-center gap-4 text-xs font-semibold">
+        <div className="flex flex-wrap items-center gap-3 md:gap-4 text-xs font-semibold">
           <div className="flex items-center gap-2">
             <span className="size-2.5 rounded-full bg-[#2dd4a8] shadow-[0_0_8px_#2dd4a8]" />
-            <span className="text-white/80">โต๊ะว่าง ({availableCount})</span>
+            <span className="text-white/80">
+              {selectionMode ? "โต๊ะว่าง (กดเลือกได้)" : "โต๊ะว่าง"} ({availableCount})
+            </span>
           </div>
           <div className="flex items-center gap-2">
             <span className="size-2.5 rounded-full bg-[#ff4757] shadow-[0_0_8px_#ff4757]" />
-            <span className="text-white/80">มีลูกค้า ({occupiedCount})</span>
+            <span className="text-white/80">
+              {selectionMode ? "มีลูกค้า (กดไม่ได้)" : "มีลูกค้า"} ({occupiedCount})
+            </span>
           </div>
           <div className="text-white/40 border-l border-white/10 pl-3">
             ทั้งหมด {localTables.length} โต๊ะ
@@ -167,7 +317,17 @@ export default function TableBlueprint({
 
         {/* Action Controls */}
         <div className="flex items-center gap-2.5">
-          {isAdmin ? (
+          {selectionMode ? (
+            /* Selection Mode Help Tag */
+            <div className="flex items-center gap-2 text-xs text-white/70 bg-white/5 px-3 py-1.5 rounded-lg border border-white/5">
+              <span>👉 คลิกที่โต๊ะว่างเพื่อเลือกโต๊ะ</span>
+              {selectedTableNumber && (
+                <span className="font-bold text-[#ffb347] bg-[#ffb347]/15 px-2 py-0.5 rounded">
+                  โต๊ะที่เลือก: #{selectedTableNumber}
+                </span>
+              )}
+            </div>
+          ) : isAdmin ? (
             <>
               {/* Admin Mode Toggle */}
               <button
@@ -179,7 +339,9 @@ export default function TableBlueprint({
                     : "bg-white/10 text-white hover:bg-white/15"
                 }`}
               >
-                <span>{isEditMode ? "✏️ กำลังจัดผัง (เปิดใช้งาน)" : "✏️ จัดตำแหน่งโต๊ะ (Drag & Drop)"}</span>
+                <span>
+                  {isEditMode ? "✏️ กำลังจัดผัง (เปิดใช้งาน)" : "✏️ จัดตำแหน่งโต๊ะ & โซน (Drag & Drop)"}
+                </span>
               </button>
 
               {/* Add Table Button */}
@@ -239,18 +401,42 @@ export default function TableBlueprint({
       {/* Save Success Banner */}
       {saveSuccess && (
         <div className="px-4 py-2.5 rounded-xl bg-[#2dd4a8]/15 border border-[#2dd4a8]/30 text-[#2dd4a8] text-xs font-bold flex items-center justify-between animate-fade-quick">
-          <span>✅ บันทึกตำแหน่งผังโต๊ะอาหารลงฐานข้อมูล MySQL เรียบร้อยแล้ว!</span>
-          <button onClick={() => setSaveSuccess(false)} className="text-white/40 hover:text-white text-xs">✕</button>
+          <span>✅ บันทึกตำแหน่งผังโต๊ะและจุดสำคัญลงฐานข้อมูล MySQL เรียบร้อยแล้ว!</span>
+          <button
+            onClick={() => setSaveSuccess(false)}
+            className="text-white/40 hover:text-white text-xs"
+          >
+            ✕
+          </button>
         </div>
       )}
 
       {/* Edit Mode Helper Notification */}
       {isAdmin && isEditMode && (
-        <div className="px-4 py-2 rounded-xl bg-[#ffb347]/10 border border-[#ffb347]/30 text-[#ffb347] text-xs flex items-center gap-2">
-          <span>💡</span>
+        <div className="px-4 py-2.5 rounded-xl bg-[#ffb347]/10 border border-[#ffb347]/30 text-[#ffb347] text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span>💡</span>
+            <span>
+              <strong>โหมดจัดผังร้าน:</strong> สามารถคลิกลากโต๊ะอาหาร, ครัว, ห้องน้ำ, แคชเชียร์
+              ไปยังตำแหน่งที่ต้องการได้อิสระ <em>(ตำแหน่งหน้าร้านถูกล็อคไว้คงที่)</em>
+            </span>
+          </div>
+          {hasChanges && (
+            <span className="text-[11px] font-bold text-white/80 bg-[#ffb347]/20 px-2.5 py-1 rounded-md">
+              มีตำแหน่งที่ยังไม่บันทึก อย่าลืมกด &quot;บันทึกผังโต๊ะ&quot; สีเขียว
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Selection Mode Helper Notice */}
+      {selectionMode && (
+        <div className="px-4 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-xs text-white/80 flex items-center justify-between">
           <span>
-            <strong>โหมดจัดผังร้าน:</strong> คลิกแล้วลากโต๊ะอาหารไปยังตำแหน่งที่ต้องการในแปลนร้าน
-            เมื่อจัดเสร็จแล้วอย่าลืมกดปุ่ม <strong>&quot;บันทึกผังโต๊ะ&quot;</strong> สีเขียวด้านบน
+            📍 <strong>เลือกโต๊ะ:</strong> โต๊ะสีเขียวพร้อมจัดที่นั่ง (คลิกเพื่อเลือก) | โต๊ะสีแดงไม่ว่าง (ไม่สามารถกดได้)
+          </span>
+          <span className="text-white/50 text-[11px]">
+            {availableCount > 0 ? `มีโต๊ะว่าง ${availableCount} โต๊ะ` : "⚠️ ขณะนี้ไม่มีโต๊ะว่าง"}
           </span>
         </div>
       )}
@@ -274,91 +460,150 @@ export default function TableBlueprint({
             }}
           />
 
-          {/* Blueprint Compass / Coordinate Markers */}
-          <div className="absolute top-3 left-4 text-[10px] font-mono tracking-widest text-white/30 uppercase">
-            REST_FLOOR_PLAN • 940x640px
+          {/* Blueprint Info Label */}
+          <div className="absolute top-3 left-4 text-[10px] font-mono tracking-widest text-white/30 uppercase pointer-events-none">
+            REST_FLOOR_PLAN • {canvasWidth}x{canvasHeight}px
           </div>
 
-          {/* ── 2. LANDMARKS ── */}
+          {/* ── 2. LANDMARKS (Kitchen, Restroom, Cashier, Entrance) ── */}
+          {localLandmarks.map((lm) => {
+            const isEntrance = lm.type === "ENTRANCE" || lm.id === "lm-entrance";
+            const isDraggingLm =
+              dragState?.targetType === "landmark" && dragState?.id === lm.id;
+            const isCashier = lm.type === "CASHIER";
+            const isRestroom = lm.type === "RESTROOM";
 
-          {/* Kitchen / Food Pickup (Top Center) */}
-          <div
-            style={{ left: "300px", top: "18px", width: "340px", height: "46px" }}
-            className="absolute rounded-xl border border-white/10 bg-white/[0.04] backdrop-blur-sm flex items-center justify-center gap-2 text-xs font-bold text-white/60 shadow-inner"
-          >
-            <span>🍳</span>
-            <span>ครัวหลัก & เคาน์เตอร์รับอาหาร (KITCHEN & PICKUP)</span>
-          </div>
+            // 🚪 FIXED ENTRANCE (หน้าร้าน)
+            if (isEntrance) {
+              return (
+                <div
+                  key={lm.id}
+                  style={{
+                    left: `${lm.x}px`,
+                    top: `${lm.y}px`,
+                    width: `${lm.width || 420}px`,
+                    height: `${lm.height || 70}px`,
+                  }}
+                  className="absolute rounded-2xl border-2 border-dashed border-[#2dd4a8]/50 bg-[#2dd4a8]/10 backdrop-blur-md flex flex-col items-center justify-center text-center shadow-lg shadow-[#2dd4a8]/10 select-none z-10 pointer-events-none"
+                >
+                  <div className="flex items-center gap-2 text-sm font-black text-[#2dd4a8] tracking-wide uppercase">
+                    <span className="text-lg">🚪</span>
+                    <span>{lm.label || "ทางเข้าร้าน (ฝั่งหน้าร้าน)"}</span>
+                    <span className="text-lg">🚪</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-[10px] font-bold text-[#2dd4a8]/80 mt-0.5">
+                    <span>▲ MAIN ENTRANCE / FRONT OF RESTAURANT ▲</span>
+                    {isEditMode && (
+                      <span className="bg-[#2dd4a8]/25 text-[#2dd4a8] px-1.5 py-0.5 rounded text-[9px] border border-[#2dd4a8]/40">
+                        🔒 ล็อคตำแหน่งหน้าร้าน
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            }
 
-          {/* Restrooms (Top Left) */}
-          <div
-            style={{ left: "25px", top: "18px", width: "120px", height: "46px" }}
-            className="absolute rounded-xl border border-white/10 bg-white/[0.03] flex items-center justify-center gap-1.5 text-[11px] font-semibold text-white/50"
-          >
-            <span>🚻</span>
-            <span>ห้องน้ำ</span>
-          </div>
+            // 🍳 🚻 💵 MOVABLE LANDMARKS
+            let containerStyle = "border-white/10 bg-white/[0.04] text-white/70";
+            if (isCashier) {
+              containerStyle = "border-[#ffb347]/30 bg-[#ffb347]/10 text-[#ffb347]";
+            } else if (isRestroom) {
+              containerStyle = "border-white/10 bg-white/[0.03] text-white/60";
+            }
 
-          {/* Cashier & Beverage Bar (Bottom Right) */}
-          <div
-            style={{ left: "710px", top: "500px", width: "190px", height: "65px" }}
-            className="absolute rounded-xl border border-[#ffb347]/30 bg-[#ffb347]/10 flex flex-col items-center justify-center gap-0.5 text-xs font-bold text-[#ffb347]"
-          >
-            <div className="flex items-center gap-1.5">
-              <span>💵</span>
-              <span>แคชเชียร์ & บาร์น้ำ</span>
-            </div>
-            <span className="text-[10px] text-[#ffb347]/70 font-normal">CASHIER & BAR</span>
-          </div>
-
-          {/* ── ⭐ PRIMARY LANDMARK: หน้าร้าน / ทางเข้าร้าน (BOTTOM) ⭐ ── */}
-          <div
-            style={{ left: "260px", top: "545px", width: "420px", height: "70px" }}
-            className="absolute rounded-2xl border-2 border-dashed border-[#2dd4a8]/50 bg-[#2dd4a8]/10 backdrop-blur-md flex flex-col items-center justify-center text-center shadow-lg shadow-[#2dd4a8]/10"
-          >
-            <div className="flex items-center gap-2 text-sm font-black text-[#2dd4a8] tracking-wide uppercase">
-              <span className="text-lg">🚪</span>
-              <span>ทางเข้าร้าน (ฝั่งหน้าร้าน)</span>
-              <span className="text-lg">🚪</span>
-            </div>
-            <div className="flex items-center gap-2 text-[10px] font-bold text-[#2dd4a8]/80 mt-0.5">
-              <span>▲ MAIN ENTRANCE / FRONT OF RESTAURANT ▲</span>
-            </div>
-          </div>
+            return (
+              <div
+                key={lm.id}
+                onPointerDown={(e) => handleLandmarkPointerDown(e, lm)}
+                style={{
+                  left: `${lm.x}px`,
+                  top: `${lm.y}px`,
+                  width: `${lm.width || 180}px`,
+                  height: `${lm.height || 50}px`,
+                  zIndex: isDraggingLm ? 50 : 15,
+                  cursor: isEditMode ? "grab" : "default",
+                  transform: isDraggingLm ? "scale(1.03)" : "scale(1)",
+                }}
+                className={`absolute rounded-xl border p-2 flex flex-col items-center justify-center text-center select-none shadow-md backdrop-blur-sm transition-transform duration-75 ${containerStyle} ${
+                  isDraggingLm ? "ring-2 ring-[#ffb347] shadow-xl cursor-grabbing" : ""
+                }`}
+                title={isEditMode ? `ลากเพื่อย้าย ${lm.label}` : lm.label}
+              >
+                <div className="flex items-center gap-1.5 text-xs font-bold pointer-events-none">
+                  {isEditMode && <span className="text-[#ffb347] text-[10px]">⠿</span>}
+                  <span>{lm.label}</span>
+                </div>
+                {lm.subLabel && (
+                  <span className="text-[9px] opacity-60 font-mono pointer-events-none mt-0.5">
+                    {lm.subLabel}
+                  </span>
+                )}
+              </div>
+            );
+          })}
 
           {/* ── 3. DINING TABLES ── */}
           {localTables.map((table) => {
             const isOccupied = table.status === "OCCUPIED";
-            const isDragging = dragState?.tableId === table.table_id;
-            const isSelected = selectedTableId === table.table_id;
+            const isDragging =
+              dragState?.targetType === "table" && dragState?.id === table.table_id;
+
+            // Selection Mode active status check
+            const isSelected =
+              (selectedTableNumber != null &&
+                String(table.table_number) === String(selectedTableNumber)) ||
+              (selectedTableId != null && table.table_id === selectedTableId);
+
             const isLarge = Number(table.capacity) >= 6;
             const isRound = table.shape === "round";
 
             const width = isLarge ? 140 : 100;
             const height = 85;
 
+            // Interaction styles depending on mode
+            let cursorStyle = "pointer";
+            if (isEditMode) {
+              cursorStyle = "grab";
+            } else if (selectionMode) {
+              cursorStyle = isOccupied ? "not-allowed" : "pointer";
+            }
+
             return (
               <div
                 key={table.table_id}
-                onPointerDown={(e) => handlePointerDown(e, table)}
-                onClick={() => handleTableClick(table)}
+                onPointerDown={(e) => handleTablePointerDown(e, table)}
+                onClick={() => handleTableClick(table, isOccupied)}
                 style={{
                   left: `${table.pos_x}px`,
                   top: `${table.pos_y}px`,
                   width: `${width}px`,
                   height: `${height}px`,
                   zIndex: isDragging ? 50 : isSelected ? 40 : 20,
-                  transform: isDragging ? "scale(1.05)" : "scale(1)",
-                  cursor: isEditMode ? "grab" : "pointer",
+                  transform: isDragging
+                    ? "scale(1.05)"
+                    : isSelected
+                    ? "scale(1.04)"
+                    : "scale(1)",
+                  cursor: cursorStyle,
+                  opacity: selectionMode && isOccupied ? 0.45 : 1,
+                  filter: selectionMode && isOccupied ? "grayscale(40%)" : "none",
                 }}
-                className={`absolute transition-transform duration-75 select-none rounded-2xl border-2 p-2 flex flex-col justify-between backdrop-blur-md shadow-xl ${
+                className={`absolute transition-all duration-75 select-none rounded-2xl border-2 p-2 flex flex-col justify-between backdrop-blur-md shadow-xl ${
                   isOccupied
                     ? "border-[#ff4757]/80 bg-[#ff4757]/15 shadow-[#ff4757]/20 text-white"
                     : "border-[#2dd4a8]/70 bg-[#12121e]/90 shadow-black/40 text-white hover:border-[#2dd4a8]"
-                } ${isDragging ? "ring-4 ring-[#ffb347] shadow-2xl cursor-grabbing" : ""} ${
-                  isSelected ? "ring-2 ring-white" : ""
+                } ${
+                  isDragging ? "ring-4 ring-[#ffb347] shadow-2xl cursor-grabbing" : ""
+                } ${
+                  isSelected
+                    ? "ring-4 ring-[#ffb347] border-[#ffb347] bg-[#ffb347]/20 shadow-[0_0_20px_rgba(255,179,71,0.6)]"
+                    : ""
                 } ${isRound ? "rounded-full" : ""}`}
-                title={`โต๊ะ ${table.table_number} (${table.status === "AVAILABLE" ? "ว่าง" : "มีลูกค้า"})`}
+                title={
+                  selectionMode && isOccupied
+                    ? `โต๊ะ ${table.table_number} ไม่ว่าง (มีลูกค้าอยู่ - ไม่สามารถเลือกได้)`
+                    : `โต๊ะ ${table.table_number} (${isOccupied ? "มีลูกค้า" : "ว่าง"})`
+                }
               >
                 {/* Chairs Visual Representation (Dots around table) */}
                 <div className="absolute -top-1.5 left-1/4 size-2 rounded-full bg-white/40" />
@@ -387,23 +632,38 @@ export default function TableBlueprint({
                 <div className="pointer-events-none flex items-center justify-between mt-0.5">
                   <span
                     className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                      isOccupied
+                      isSelected
+                        ? "bg-[#ffb347] text-black font-extrabold"
+                        : isOccupied
                         ? "bg-[#ff4757]/30 text-[#ff8b94]"
                         : "bg-[#2dd4a8]/20 text-[#2dd4a8]"
                     }`}
                   >
-                    {isOccupied ? "มีลูกค้า" : "ว่าง"}
+                    {isSelected
+                      ? "✓ โต๊ะที่เลือก"
+                      : isOccupied
+                      ? selectionMode
+                        ? "❌ ไม่ว่าง"
+                        : "มีลูกค้า"
+                      : "ว่าง"}
                   </span>
 
-                  {isOccupied && table.current_order_total && (
+                  {/* Price or selection prompt */}
+                  {selectionMode ? (
+                    !isOccupied && !isSelected && (
+                      <span className="text-[9px] text-[#2dd4a8] font-bold">
+                        กดเลือก
+                      </span>
+                    )
+                  ) : isOccupied && table.current_order_total ? (
                     <span className="text-[10px] font-mono font-bold text-[#ffb347]">
                       ฿{Number(table.current_order_total).toLocaleString()}
                     </span>
-                  )}
+                  ) : null}
                 </div>
 
-                {/* Order Item Count if Occupied */}
-                {isOccupied && table.item_count > 0 && (
+                {/* Order Item Count if Occupied (View mode only) */}
+                {!selectionMode && isOccupied && table.item_count > 0 && (
                   <div className="pointer-events-none text-[9px] text-white/50 text-right">
                     {table.item_count} จาน
                   </div>
@@ -414,8 +674,8 @@ export default function TableBlueprint({
         </div>
       </div>
 
-      {/* ── Table Details Modal (When clicked in View Mode) ── */}
-      {activeTableDetail && (
+      {/* ── Table Details Modal (When clicked in Normal View Mode only) ── */}
+      {!selectionMode && activeTableDetail && (
         <div
           className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-fade-quick"
           onClick={() => setActiveTableDetail(null)}
@@ -439,7 +699,8 @@ export default function TableBlueprint({
                 <div>
                   <h3 className="text-lg font-bold">โต๊ะ {activeTableDetail.table_number}</h3>
                   <span className="text-xs text-white/50">
-                    ความจุ {activeTableDetail.capacity || 4} ที่นั่ง • โซน {activeTableDetail.zone || "MAIN"}
+                    ความจุ {activeTableDetail.capacity || 4} ที่นั่ง • โซน{" "}
+                    {activeTableDetail.zone || "MAIN"}
                   </span>
                 </div>
               </div>
@@ -463,7 +724,9 @@ export default function TableBlueprint({
                       : "bg-[#2dd4a8]/20 text-[#2dd4a8] border border-[#2dd4a8]/30"
                   }`}
                 >
-                  {activeTableDetail.status === "OCCUPIED" ? "🍽️ มีลูกค้านั่งรับประทาน" : "✅ โต๊ะว่าง พร้อมให้บริการ"}
+                  {activeTableDetail.status === "OCCUPIED"
+                    ? "🍽️ มีลูกค้านั่งรับประทาน"
+                    : "✅ โต๊ะว่าง พร้อมให้บริการ"}
                 </span>
               </div>
 
@@ -478,7 +741,9 @@ export default function TableBlueprint({
                   </div>
                   <div className="flex items-center justify-between border-b border-white/5 pb-2">
                     <span className="text-white/50">จำนวนรายการอาหาร:</span>
-                    <span className="font-bold text-white">{activeTableDetail.item_count || 0} รายการ</span>
+                    <span className="font-bold text-white">
+                      {activeTableDetail.item_count || 0} รายการ
+                    </span>
                   </div>
                   <div className="flex items-center justify-between pt-1">
                     <span className="text-white/50 text-sm">ยอดรวมปัจจุบัน:</span>
@@ -496,7 +761,9 @@ export default function TableBlueprint({
               {/* Position Coordinate Info (For reference) */}
               <div className="flex items-center justify-between text-[11px] text-white/40 px-1 font-mono">
                 <span>พิกัดผังร้าน:</span>
-                <span>X: {activeTableDetail.pos_x}px, Y: {activeTableDetail.pos_y}px</span>
+                <span>
+                  X: {activeTableDetail.pos_x}px, Y: {activeTableDetail.pos_y}px
+                </span>
               </div>
             </div>
 
