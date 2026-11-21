@@ -331,10 +331,15 @@ export async function POST(request) {
       );
     }
 
-    // 7. อัปเดตสถานะโต๊ะเป็น OCCUPIED
+    // 7. อัปเดตสถานะโต๊ะเป็น OCCUPIED และเริ่มจับเวลา ณ ตอนนั้นทันที
     if (table_id) {
       await pool.query(
-        `UPDATE dining_table SET status = 'OCCUPIED', current_order_id = ? WHERE table_id = ?`,
+        `UPDATE dining_table
+         SET status = 'OCCUPIED',
+             current_order_id = ?,
+             occupied_at = COALESCE(occupied_at, NOW()),
+             updated_at = NOW()
+         WHERE table_id = ?`,
         [order_id, table_id]
       );
     }

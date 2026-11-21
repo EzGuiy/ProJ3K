@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import TableBlueprint from "@/components/TableBlueprint";
+import PromptPayModal from "@/components/PromptPayModal";
 
 /* ---------- Shared design constants (mirrors order/page.js) ---------- */
 
@@ -228,6 +230,7 @@ export default function StaffPage() {
   const [showQrModal, setShowQrModal] = useState(false);
   const [selectedQueueForTable, setSelectedQueueForTable] = useState(null);
   const [selectedTableNumber, setSelectedTableNumber] = useState("1");
+  const [paymentModalData, setPaymentModalData] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
   const [newQueueForm, setNewQueueForm] = useState({
     customerName: "",
@@ -243,6 +246,10 @@ export default function StaffPage() {
   const [searchReservation, setSearchReservation] = useState("");
   const [selectedReservationForTable, setSelectedReservationForTable] = useState(null);
   const [reservationTableNumber, setReservationTableNumber] = useState("1");
+
+  // สถานะสำหรับผังร้าน (Floor Plan Blueprint)
+  const [floorPlanTables, setFloorPlanTables] = useState([]);
+  const [floorPlanLayout, setFloorPlanLayout] = useState(null);
 
   // ซ่อน Toast แจ้งเตือนอัตโนมัติ
   useEffect(() => {
@@ -274,15 +281,44 @@ export default function StaffPage() {
     }
   }, []);
 
+  const fetchFloorPlan = useCallback(async () => {
+    try {
+      const response = await fetch("/api/tables");
+      const data = await response.json();
+      if (data.tables) setFloorPlanTables(data.tables);
+      if (data.layout) setFloorPlanLayout(data.layout);
+    } catch (error) {
+      console.error("Error fetching floor plan:", error);
+    }
+  }, []);
+
   useEffect(() => {
     fetchOrders();
     fetchReservations();
+    fetchFloorPlan();
     const interval = setInterval(() => {
       fetchOrders();
       fetchReservations();
+      fetchFloorPlan();
     }, 5000); // Auto-refresh every 5 seconds
     return () => clearInterval(interval);
-  }, [fetchOrders, fetchReservations]);
+  }, [fetchOrders, fetchReservations, fetchFloorPlan]);
+
+  // เมื่อเปิด modal จัดโต๊ะให้คิว ให้ตั้งค่าโต๊ะว่างเริ่มต้น (รันเฉพาะตอนเปิด modal สำหรับคิวนั้นๆ)
+  useEffect(() => {
+    if (selectedQueueForTable) {
+      const firstAvailable = floorPlanTables.find((t) => t.status === "AVAILABLE");
+      setSelectedTableNumber(firstAvailable ? String(firstAvailable.table_number) : "");
+    }
+  }, [selectedQueueForTable?.id]);
+
+  // เมื่อเปิด modal จัดโต๊ะให้การจอง ให้ตั้งค่าโต๊ะว่างเริ่มต้น (รันเฉพาะตอนเปิด modal สำหรับการจองนั้นๆ)
+  useEffect(() => {
+    if (selectedReservationForTable) {
+      const firstAvailable = floorPlanTables.find((t) => t.status === "AVAILABLE");
+      setReservationTableNumber(firstAvailable ? String(firstAvailable.table_number) : "");
+    }
+  }, [selectedReservationForTable?.id || selectedReservationForTable?.reservationId]);
 
   const handleStatusChange = async (orderId, newStatus) => {
     try {
@@ -344,21 +380,41 @@ export default function StaffPage() {
     setToastMessage(`📢 กำลังเรียกคิว ${queueId} (${target?.customerName || ""})`);
   };
 
-  // จัดโต๊ะให้ลูกค้า
-  const handleConfirmAssignTable = (queueId, tableNum) => {
+  // จัดโต๊ะให้ลูกค้า (ล็อคสถานะโต๊ะใน MySQL และเริ่มจับเวลาทันที)
+  const handleConfirmAssignTable = async (queueId, tableNum) => {
     if (!tableNum) return;
-    setQueues((prev) =>
-      prev.map((q) =>
-        q.id === queueId
-          ? { ...q, status: "seated", tableNumber: String(tableNum) }
-          : q
-      )
-    );
-    const target = queues.find((q) => q.id === queueId);
-    setSelectedQueueForTable(null);
-    setToastMessage(
-      `✅ จัดคิว ${queueId} (${target?.customerName || ""}) นั่งโต๊ะ ${tableNum} เรียบร้อยแล้ว`
-    );
+    try {
+      // 1. ล็อคโต๊ะใน MySQL ทันทีเป็น OCCUPIED และเริ่มจับเวลา
+      await fetch("/api/tables", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tableNumber: String(tableNum),
+          status: "OCCUPIED",
+          action: "occupy",
+        }),
+      });
+
+      // 2. อัปเดตรายการคิวในระบบ
+      setQueues((prev) =>
+        prev.map((q) =>
+          q.id === queueId
+            ? { ...q, status: "seated", tableNumber: String(tableNum) }
+            : q
+        )
+      );
+
+      const target = queues.find((q) => q.id === queueId);
+      setSelectedQueueForTable(null);
+      setToastMessage(
+        `✅ จัดคิว ${queueId} (${target?.customerName || ""}) นั่งโต๊ะ ${tableNum} เรียบร้อยแล้ว (ล็อคโต๊ะ & เริ่มจับเวลาทันที)`
+      );
+
+      // 3. รีเฟรชผังร้านทันที เพื่อเปลี่ยนเป็นโต๊ะสีแดง
+      fetchFloorPlan();
+    } catch (err) {
+      console.error("Error assigning table for queue:", err);
+    }
   };
 
   // ยกเลิก / ข้ามคิว / สละสิทธิ์
@@ -462,6 +518,18 @@ export default function StaffPage() {
   const handleConfirmSeatReservation = async (reservationId, tableNum) => {
     if (!tableNum) return;
     try {
+      // 1. ล็อคโต๊ะใน MySQL ทันทีเป็น OCCUPIED และเริ่มจับเวลา
+      await fetch("/api/tables", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tableNumber: String(tableNum),
+          status: "OCCUPIED",
+          action: "occupy",
+        }),
+      });
+
+      // 2. บันทึกสถานะการจองเป็น seated
       const res = await fetch(`/api/reservations/${reservationId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -469,12 +537,28 @@ export default function StaffPage() {
       });
       if (res.ok) {
         const target = reservations.find((r) => r.id === reservationId || r.reservationId === reservationId);
-        setToastMessage(`✅ จัดโต๊ะ ${tableNum} ให้ คุณ ${target?.name || ""} เรียบร้อยแล้ว (เวลาจอง: ${target?.bookingTime || "เป๊ะๆ"} น.)`);
+        setToastMessage(`✅ จัดโต๊ะ ${tableNum} ให้ คุณ ${target?.name || ""} เรียบร้อยแล้ว (ล็อคโต๊ะ & เริ่มจับเวลาทันที)`);
         setSelectedReservationForTable(null);
         fetchReservations();
+        fetchFloorPlan();
       }
     } catch (err) {
       console.error("Error seating reservation:", err);
+    }
+  };
+
+  // เคลียร์โต๊ะให้ว่าง (เมื่อลูกค้าเช็คบิล/ลุกออกจากโต๊ะ)
+  const handleReleaseTable = async (tableNum) => {
+    try {
+      await fetch("/api/tables", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tableNumber: String(tableNum), action: "release" }),
+      });
+      setToastMessage(`🔄 เคลียร์โต๊ะ ${tableNum} ให้เป็นโต๊ะว่างเรียบร้อยแล้ว`);
+      fetchFloorPlan();
+    } catch (err) {
+      console.error("Error releasing table:", err);
     }
   };
 
@@ -619,7 +703,9 @@ export default function StaffPage() {
                   ? "ระบบจัดการออเดอร์"
                   : activeNav === "queue"
                   ? "ระบบจัดการคิวลูกค้า (QR Code)"
-                  : "ระบบคิวจองโต๊ะล่วงหน้า (ตามเวลาเป๊ะๆ)"}
+                  : activeNav === "reservations"
+                  ? "ระบบคิวจองโต๊ะล่วงหน้า (ตามเวลาเป๊ะๆ)"
+                  : "ผังร้าน & สถานะโต๊ะอาหาร (Floor Plan)"}
               </h1>
               <p className="mt-0.5 text-xs text-ink-3">
                 อัพเดทล่าสุด: {formatTime(lastRefresh)}
@@ -689,6 +775,28 @@ export default function StaffPage() {
                     : "bg-orange/20 text-orange"
                 }`}>
                   รอ {reservationCounts.confirmed}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveNav("floorplan")}
+              className={`flex items-center gap-2 rounded-md px-3.5 py-1.5 text-xs font-semibold transition ${FOCUS} ${
+                activeNav === "floorplan"
+                  ? "bg-orange text-[#0a0a0f] shadow-sm font-bold"
+                  : "text-ink-2 hover:text-ink"
+              }`}
+            >
+              <span>🗺️</span>
+              <span>ผังร้าน</span>
+              {floorPlanTables.length > 0 && (
+                <span className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
+                  activeNav === "floorplan"
+                    ? "bg-black/20 text-[#0a0a0f]"
+                    : "bg-glass text-ink-3"
+                }`}>
+                  {floorPlanTables.filter((t) => t.status === "OCCUPIED").length}/{floorPlanTables.length} โต๊ะ
                 </span>
               )}
             </button>
@@ -974,9 +1082,29 @@ export default function StaffPage() {
 
                       {/* Actions */}
                       <div
-                        className="flex gap-2.5 border-t border-line pt-3"
+                        className="flex flex-wrap items-center gap-2.5 border-t border-line pt-3"
                         onClick={(e) => e.stopPropagation()}
                       >
+                        {/* ปุ่มรับชำระเงินพร้อมเพย์ */}
+                        <button
+                          type="button"
+                          className={`flex items-center gap-1.5 rounded-md border border-blue-500/40 bg-blue-500/15 px-3 py-2 text-[0.82rem] font-bold text-blue-300 transition hover:bg-blue-500/25 hover:border-blue-400 ${FOCUS}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPaymentModalData({
+                              orderId: order.order_id,
+                              tableNumber: order.tableNumber !== "-" ? order.tableNumber : null,
+                              amount: order.totalAmount,
+                              customerName: order.customerName,
+                            });
+                          }}
+                          title="เปิด QR Code สแกนจ่ายพร้อมเพย์ล็อคยอด"
+                        >
+                          <span>💳 รับชำระพร้อมเพย์</span>
+                          <span className="font-mono font-extrabold text-white">
+                            ฿{order.totalAmount?.toLocaleString()}
+                          </span>
+                        </button>
                         {/* ปุ่มเสิร์ฟรายการที่พร้อมทั้งหมด */}
                         {order.readyCount > 0 && (
                           <button
@@ -1559,6 +1687,33 @@ export default function StaffPage() {
             )}
           </div>
         )}
+
+        {/* ============================================================== */}
+        {/* VIEW 4: ผังร้าน & ตำแหน่งโต๊ะอาหาร (FLOOR PLAN VIEW)          */}
+        {/* ============================================================== */}
+        {activeNav === "floorplan" && (
+          <div className="p-4 md:p-6 animate-fade-quick">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-bold text-ink flex items-center gap-2">
+                  <span>🗺️</span> ผังร้านและสถานะโต๊ะอาหารปัจจุบัน
+                </h2>
+                <p className="text-xs text-ink-3 mt-1">
+                  มุมมองผังร้านแบบเรียลไทม์ (โหมดดูอย่างเดียว - แอดมินเป็นผู้จัดตำแหน่งโต๊ะ) คลิกที่โต๊ะเพื่อดูรายละเอียดสถานะและออเดอร์
+                </p>
+              </div>
+            </div>
+
+            <TableBlueprint
+              tables={floorPlanTables}
+              layout={floorPlanLayout}
+              isAdmin={false}
+              onRefresh={fetchFloorPlan}
+              onReleaseTable={handleReleaseTable}
+              onOpenPayment={(data) => setPaymentModalData(data)}
+            />
+          </div>
+        )}
       </main>
 
       {/* ── Modal: จัดโต๊ะสำหรับการจองล่วงหน้า (Assign Table for Reservation) ── */}
@@ -1568,70 +1723,99 @@ export default function StaffPage() {
           onClick={() => setSelectedReservationForTable(null)}
         >
           <div
-            className="w-full max-w-sm rounded-xl border border-line bg-panel p-6 shadow-2xl animate-scale-in"
+            className="w-full max-w-4xl max-h-[92vh] overflow-y-auto rounded-2xl border border-line bg-panel p-5 md:p-6 shadow-2xl animate-scale-in"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-3 flex items-center justify-between border-b border-line pb-3">
               <div>
-                <h3 className="text-lg font-bold text-ink">
-                  📍 จัดโต๊ะให้การจอง #{selectedReservationForTable.id || selectedReservationForTable.reservationId}
+                <h3 className="text-lg font-bold text-ink flex items-center gap-2">
+                  <span>📍</span> จัดโต๊ะให้การจอง #{selectedReservationForTable.id || selectedReservationForTable.reservationId}
                 </h3>
-                <p className="text-xs text-ink-3 mt-0.5">
-                  ลูกค้า: คุณ {selectedReservationForTable.name} ({selectedReservationForTable.partySize} ท่าน)
-                  <br />
-                  รอบเวลาจอง: <strong className="text-orange">{selectedReservationForTable.bookingTime || "18:30"} น.</strong>
+                <p className="text-xs text-ink-3 mt-1">
+                  ลูกค้า: <strong className="text-ink">คุณ {selectedReservationForTable.name}</strong> ({selectedReservationForTable.partySize} ท่าน)
+                  {" • "}รอบเวลาจอง: <strong className="text-orange">{selectedReservationForTable.bookingTime || "18:30"} น.</strong>
                 </p>
               </div>
               <button
-                className="text-ink-3 hover:text-ink text-base"
+                className="size-8 rounded-lg bg-glass hover:bg-glass-strong text-ink-3 hover:text-ink text-base flex items-center justify-center"
                 onClick={() => setSelectedReservationForTable(null)}
               >
                 ✕
               </button>
             </div>
 
-            <p className="mb-3 text-xs font-semibold text-ink-2">
-              เลือกหมายเลขโต๊ะที่พร้อมให้บริการ:
+            <p className="mb-2 text-xs font-semibold text-ink-2">
+              🗺️ คลิกเลือกโต๊ะว่าง (สีเขียว) บนผังร้านด้านล่าง <em>(โต๊ะสีแดงมีลูกค้าอยู่ จะไม่สามารถกดเลือกได้)</em>:
             </p>
 
-            {/* Grid โต๊ะ 1 - 10 */}
-            <div className="grid grid-cols-5 gap-2 mb-4">
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
-                <button
-                  key={num}
-                  type="button"
-                  className={`flex h-11 items-center justify-center rounded-lg border font-bold text-sm transition ${
-                    reservationTableNumber === String(num)
-                      ? "border-orange bg-orange text-[#0a0a0f]"
-                      : "border-line bg-glass text-ink hover:border-orange/50"
-                  }`}
-                  onClick={() => setReservationTableNumber(String(num))}
-                >
-                  {num}
-                </button>
-              ))}
+            {/* Blueprint Floor Plan Selection Mode */}
+            <div className="my-2">
+              <TableBlueprint
+                tables={floorPlanTables}
+                layout={floorPlanLayout}
+                isAdmin={false}
+                selectionMode={true}
+                selectedTableNumber={reservationTableNumber}
+                onSelectTable={(table) => {
+                  setReservationTableNumber(String(table.table_number));
+                }}
+              />
             </div>
 
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="หรือระบุเลขโต๊ะอื่นๆ"
-                value={reservationTableNumber}
-                onChange={(e) => setReservationTableNumber(e.target.value)}
-                className="flex-1 rounded-md border border-line bg-glass px-3 py-2 text-sm text-ink placeholder:text-ink-3 focus:border-orange focus:outline-none"
-              />
-              <button
-                type="button"
-                className={`rounded-md bg-orange px-4 py-2 text-sm font-bold text-[#0a0a0f] hover:brightness-110 ${FOCUS}`}
-                onClick={() =>
-                  handleConfirmSeatReservation(
-                    selectedReservationForTable.id || selectedReservationForTable.reservationId,
-                    reservationTableNumber
-                  )
-                }
-              >
-                ยืนยันนั่งโต๊ะ
-              </button>
+            {/* Bottom Confirm Action Bar */}
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-semibold text-ink-2">โต๊ะที่เลือก:</span>
+                {reservationTableNumber ? (
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-lg bg-orange px-3 py-1 text-sm font-black text-[#0a0a0f]">
+                      โต๊ะ {reservationTableNumber}
+                    </span>
+                    {(() => {
+                      const t = floorPlanTables.find((tbl) => String(tbl.table_number) === String(reservationTableNumber));
+                      if (!t) return null;
+                      return (
+                        <span className={`text-xs font-semibold ${t.status === "AVAILABLE" ? "text-green" : "text-red"}`}>
+                          ({t.capacity || 4} ที่นั่ง • {t.status === "AVAILABLE" ? "ว่างพร้อมจัด" : "ไม่ว่าง"})
+                        </span>
+                      );
+                    })()}
+                  </div>
+                ) : (
+                  <span className="text-xs text-amber font-semibold">⚠️ ยังไม่ได้เลือกโต๊ะ (คลิกโต๊ะว่างในผังด้านบน)</span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="rounded-lg border border-line bg-glass px-4 py-2 text-xs font-semibold text-ink-2 hover:bg-glass-strong hover:text-ink"
+                  onClick={() => setSelectedReservationForTable(null)}
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="button"
+                  disabled={
+                    !reservationTableNumber ||
+                    floorPlanTables.find((t) => String(t.table_number) === String(reservationTableNumber))?.status !== "AVAILABLE"
+                  }
+                  className={`rounded-lg px-5 py-2 text-xs font-bold transition ${
+                    reservationTableNumber &&
+                    floorPlanTables.find((t) => String(t.table_number) === String(reservationTableNumber))?.status === "AVAILABLE"
+                      ? `bg-orange text-[#0a0a0f] hover:brightness-110 shadow-lg shadow-orange/20 ${FOCUS}`
+                      : "bg-white/10 text-white/40 cursor-not-allowed"
+                  }`}
+                  onClick={() =>
+                    handleConfirmSeatReservation(
+                      selectedReservationForTable.id || selectedReservationForTable.reservationId,
+                      reservationTableNumber
+                    )
+                  }
+                >
+                  ยืนยันนั่งโต๊ะ
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1644,68 +1828,99 @@ export default function StaffPage() {
           onClick={() => setSelectedQueueForTable(null)}
         >
           <div
-            className="w-full max-w-sm rounded-xl border border-line bg-panel p-6 shadow-2xl animate-scale-in"
+            className="w-full max-w-4xl max-h-[92vh] overflow-y-auto rounded-2xl border border-line bg-panel p-5 md:p-6 shadow-2xl animate-scale-in"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-3 flex items-center justify-between border-b border-line pb-3">
               <div>
-                <h3 className="text-lg font-bold text-ink">
-                  📍 จัดโต๊ะให้คิว {selectedQueueForTable.id}
+                <h3 className="text-lg font-bold text-ink flex items-center gap-2">
+                  <span>📍</span> จัดโต๊ะให้คิว {selectedQueueForTable.id}
                 </h3>
-                <p className="text-xs text-ink-3 mt-0.5">
-                  ลูกค้า: {selectedQueueForTable.customerName} ({selectedQueueForTable.partySize} ท่าน)
+                <p className="text-xs text-ink-3 mt-1">
+                  ลูกค้า: <strong className="text-ink">{selectedQueueForTable.customerName}</strong> ({selectedQueueForTable.partySize} ท่าน)
+                  {" • "}ประเภทโต๊ะที่ขอ: {selectedQueueForTable.tableType || "ทั่วไป"}
                 </p>
               </div>
               <button
-                className="text-ink-3 hover:text-ink text-base"
+                className="size-8 rounded-lg bg-glass hover:bg-glass-strong text-ink-3 hover:text-ink text-base flex items-center justify-center"
                 onClick={() => setSelectedQueueForTable(null)}
               >
                 ✕
               </button>
             </div>
 
-            <p className="mb-3 text-xs font-semibold text-ink-2">
-              เลือกหมายเลขโต๊ะที่พร้อมให้บริการ:
+            <p className="mb-2 text-xs font-semibold text-ink-2">
+              🗺️ คลิกเลือกโต๊ะว่าง (สีเขียว) บนผังร้านด้านล่าง <em>(โต๊ะสีแดงมีลูกค้าอยู่ จะไม่สามารถกดเลือกได้)</em>:
             </p>
 
-            {/* Grid โต๊ะ 1 - 10 */}
-            <div className="grid grid-cols-5 gap-2 mb-4">
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
-                <button
-                  key={num}
-                  type="button"
-                  className={`flex h-11 items-center justify-center rounded-lg border font-bold text-sm transition ${
-                    selectedTableNumber === String(num)
-                      ? "border-orange bg-orange text-[#0a0a0f]"
-                      : "border-line bg-glass text-ink hover:border-orange/50"
-                  }`}
-                  onClick={() => setSelectedTableNumber(String(num))}
-                >
-                  {num}
-                </button>
-              ))}
+            {/* Blueprint Floor Plan Selection Mode */}
+            <div className="my-2">
+              <TableBlueprint
+                tables={floorPlanTables}
+                layout={floorPlanLayout}
+                isAdmin={false}
+                selectionMode={true}
+                selectedTableNumber={selectedTableNumber}
+                onSelectTable={(table) => {
+                  setSelectedTableNumber(String(table.table_number));
+                }}
+              />
             </div>
 
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="หรือระบุเลขโต๊ะอื่นๆ"
-                value={selectedTableNumber}
-                onChange={(e) => setSelectedTableNumber(e.target.value)}
-                className="flex-1 rounded-md border border-line bg-glass px-3 py-2 text-sm text-ink placeholder:text-ink-3 focus:border-orange focus:outline-none"
-              />
-              <button
-                type="button"
-                className={`rounded-md bg-orange px-4 py-2 text-sm font-bold text-[#0a0a0f] hover:brightness-110 ${FOCUS}`}
-                onClick={() =>
-                  handleConfirmAssignTable(
-                    selectedQueueForTable.id,
-                    selectedTableNumber
-                  )
-                }
-              >
-                ยืนยันนั่งโต๊ะ
-              </button>
+            {/* Bottom Confirm Action Bar */}
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-semibold text-ink-2">โต๊ะที่เลือก:</span>
+                {selectedTableNumber ? (
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-lg bg-orange px-3 py-1 text-sm font-black text-[#0a0a0f]">
+                      โต๊ะ {selectedTableNumber}
+                    </span>
+                    {(() => {
+                      const t = floorPlanTables.find((tbl) => String(tbl.table_number) === String(selectedTableNumber));
+                      if (!t) return null;
+                      return (
+                        <span className={`text-xs font-semibold ${t.status === "AVAILABLE" ? "text-green" : "text-red"}`}>
+                          ({t.capacity || 4} ที่นั่ง • {t.status === "AVAILABLE" ? "ว่างพร้อมจัด" : "ไม่ว่าง"})
+                        </span>
+                      );
+                    })()}
+                  </div>
+                ) : (
+                  <span className="text-xs text-amber font-semibold">⚠️ ยังไม่ได้เลือกโต๊ะ (คลิกโต๊ะว่างในผังด้านบน)</span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="rounded-lg border border-line bg-glass px-4 py-2 text-xs font-semibold text-ink-2 hover:bg-glass-strong hover:text-ink"
+                  onClick={() => setSelectedQueueForTable(null)}
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="button"
+                  disabled={
+                    !selectedTableNumber ||
+                    floorPlanTables.find((t) => String(t.table_number) === String(selectedTableNumber))?.status !== "AVAILABLE"
+                  }
+                  className={`rounded-lg px-5 py-2 text-xs font-bold transition ${
+                    selectedTableNumber &&
+                    floorPlanTables.find((t) => String(t.table_number) === String(selectedTableNumber))?.status === "AVAILABLE"
+                      ? `bg-orange text-[#0a0a0f] hover:brightness-110 shadow-lg shadow-orange/20 ${FOCUS}`
+                      : "bg-white/10 text-white/40 cursor-not-allowed"
+                  }`}
+                  onClick={() =>
+                    handleConfirmAssignTable(
+                      selectedQueueForTable.id,
+                      selectedTableNumber
+                    )
+                  }
+                >
+                  ยืนยันนั่งโต๊ะ
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1838,6 +2053,22 @@ export default function StaffPage() {
           </div>
         </div>
       )}
+
+      {/* Modal ชำระเงินผ่านพร้อมเพย์ (Staff Mode) */}
+      <PromptPayModal
+        isOpen={!!paymentModalData}
+        onClose={() => setPaymentModalData(null)}
+        orderId={paymentModalData?.orderId}
+        tableNumber={paymentModalData?.tableNumber}
+        amount={paymentModalData?.amount || 0}
+        customerName={paymentModalData?.customerName || "ลูกค้าทั่วไป"}
+        isStaff={true}
+        onPaymentSuccess={async (payment) => {
+          setToastMessage(`✅ รับชำระเงิน ฿${payment.amount?.toLocaleString()} สำเร็จแล้ว (โต๊ะ ${payment.tableNumber || "-"})`);
+          fetchOrders();
+          fetchFloorPlan();
+        }}
+      />
 
     </div>
   );

@@ -3,6 +3,7 @@
 
 import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import PromptPayModal from "@/components/PromptPayModal";
 
 /* ---------- Shared bits ---------- */
 
@@ -87,9 +88,27 @@ function OrderPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const isMember = searchParams.get("member") === "true";
-  const memberName = searchParams.get("name") || "";
-  const memberPhone = searchParams.get("phone") || "";
+  const [isMember, setIsMember] = useState(false);
+  const [memberName, setMemberName] = useState("");
+  const [memberPhone, setMemberPhone] = useState("");
+  const [showMemberModal, setShowMemberModal] = useState(false);
+  const [memberFormName, setMemberFormName] = useState("");
+  const [memberFormPhone, setMemberFormPhone] = useState("");
+
+  useEffect(() => {
+    const isM = searchParams.get("member") === "true";
+    const name = searchParams.get("name") || "";
+    const phone = searchParams.get("phone") || "";
+    if (isM) setIsMember(true);
+    if (name) {
+      setMemberName(name);
+      setMemberFormName(name);
+    }
+    if (phone) {
+      setMemberPhone(phone);
+      setMemberFormPhone(phone);
+    }
+  }, [searchParams]);
 
   // Menu data from MySQL Database
   const [menuItems, setMenuItems] = useState([]);
@@ -115,6 +134,122 @@ function OrderPageContent() {
   const [tableOrders, setTableOrders] = useState([]);
   const [showTracker, setShowTracker] = useState(false);
   const [newOrderSuccessId, setNewOrderSuccessId] = useState(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+
+  // ข้อมูลสถานะโต๊ะและเวลาเริ่มรับประทานอาหาร (จับเวลา Real-time)
+  const [tableStatus, setTableStatus] = useState("AVAILABLE");
+  const [sessionStartTime, setSessionStartTime] = useState(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  const fetchTableStatus = useCallback(async () => {
+    if (!tableNumber) return;
+    try {
+      const res = await fetch("/api/tables");
+      if (res.ok) {
+        const data = await res.json();
+        const tbl = (data.tables || []).find(
+          (t) => String(t.table_number) === String(tableNumber)
+        );
+        if (tbl) {
+          // ถ้าโต๊ะเคยเปิด session ทานอาหารแล้ว ต่อมาโต๊ะถูกเคลียร์เป็น AVAILABLE (ชำระเงินจบแล้ว) ให้หยุดเวลาและพากลับหน้าแรก
+          if (sessionStartTime && tbl.status === "AVAILABLE" && !tbl.occupied_at) {
+            setSessionStartTime(null);
+            setElapsedSeconds(0);
+            try {
+              localStorage.removeItem("pos_table_number");
+            } catch (e) {}
+            alert("🎉 โต๊ะนี้ได้รับการชำระเงินเรียบร้อยแล้ว ขอบคุณที่ใช้บริการครัวสุดโหด!");
+            router.push("/");
+            return;
+          }
+
+          setTableStatus(tbl.status);
+          const start = tbl.session_start_at || tbl.occupied_at || tbl.order_opened_at;
+          setSessionStartTime(start || null);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching table status:", err);
+    }
+  }, [tableNumber, sessionStartTime, router]);
+
+  useEffect(() => {
+    if (!tableNumber) return;
+    fetchTableStatus();
+    const interval = setInterval(fetchTableStatus, 5000);
+    return () => clearInterval(interval);
+  }, [tableNumber, fetchTableStatus]);
+
+  // ตัวนับเวลาจริงทุก 1 วินาที
+  useEffect(() => {
+    if (!sessionStartTime) {
+      setElapsedSeconds(0);
+      return;
+    }
+    const tick = () => {
+      const startMs = new Date(sessionStartTime).getTime();
+      if (!isNaN(startMs)) {
+        const sec = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+        setElapsedSeconds(sec);
+      }
+    };
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [sessionStartTime]);
+
+  const formatTimerDuration = (sec) => {
+    const hrs = Math.floor(sec / 3600);
+    const mins = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    if (hrs > 0) {
+      return `${hrs}:${String(mins).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    }
+    return `${String(mins).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  };
+
+  // ฟังก์ชันเริ่มจับเวลาและล็อคโต๊ะ (ทำงานอัตโนมัติเมื่อใส่ชื่อสมาชิกหรือกดสั่งอาหาร ไม่ต้องกดเริ่มเอง)
+  const handleStartOrderingSession = useCallback(async () => {
+    if (!tableNumber) return;
+    try {
+      const res = await fetch("/api/tables", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tableNumber,
+          action: "start_session",
+          status: "OCCUPIED",
+        }),
+      });
+      if (res.ok) {
+        setTableStatus("OCCUPIED");
+        setSessionStartTime(new Date().toISOString());
+      }
+    } catch (err) {
+      console.error("Error starting session:", err);
+    }
+  }, [tableNumber]);
+
+  // ทริกเกอร์ 1: เมื่อลูกค้าใส่ชื่อสมาชิกแล้ว ระบบจะเริ่มนับเวลาและล็อคโต๊ะให้อัตโนมัติทันที
+  useEffect(() => {
+    if (tableNumber && isMember && memberName && tableStatus !== "OCCUPIED" && !sessionStartTime) {
+      handleStartOrderingSession();
+    }
+  }, [tableNumber, isMember, memberName, tableStatus, sessionStartTime, handleStartOrderingSession]);
+
+  // จัดการบันทึกสมาชิกภายในหน้า /order
+  const handleMemberLoginInOrder = (e) => {
+    e.preventDefault();
+    if (!memberFormName.trim()) return;
+    setIsMember(true);
+    setMemberName(memberFormName.trim());
+    setMemberPhone(memberFormPhone.trim());
+    setShowMemberModal(false);
+    // เริ่มจับเวลาและล็อคโต๊ะให้อัตโนมัติทันที
+    if (tableNumber) {
+      handleStartOrderingSession();
+    }
+  };
 
   // ดึงรายการออเดอร์ทั้งหมดของโต๊ะนี้ (ทั้งที่กำลังทำและเสิร์ฟแล้ว)
   const fetchTableOrders = useCallback(async () => {
@@ -166,6 +301,9 @@ function OrderPageContent() {
   const tableUnservedCount = unservedItems.reduce((sum, it) => sum + (it.quantity || 1), 0);
   const tableServedCount = servedItems.reduce((sum, it) => sum + (it.quantity || 1), 0);
   const tableTotalItemsCount = tableUnservedCount + tableServedCount;
+  const tableTotalAmount = useMemo(() => {
+    return tableOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+  }, [tableOrders]);
 
   // ล็อกและจดจำหมายเลขโต๊ะสำหรับเครื่อง POS นี้โดยอัตโนมัติ
   useEffect(() => {
@@ -363,6 +501,11 @@ function OrderPageContent() {
 
       const data = await response.json();
       if (response.ok) {
+        // ทริกเกอร์ 2: เมื่อกดสั่งอาหาร ระบบจะเริ่มจับเวลาและล็อคสถานะโต๊ะอัตโนมัติทันที
+        setTableStatus("OCCUPIED");
+        if (!sessionStartTime) {
+          setSessionStartTime(new Date().toISOString());
+        }
         const newId = data.order.short_id || data.order.id;
         setOrderId(newId);
         setNewOrderSuccessId(newId);
@@ -370,6 +513,7 @@ function OrderPageContent() {
         setCart([]);
         setNote("");
         await fetchTableOrders();
+        fetchTableStatus();
         setShowTracker(true);
       } else {
         setSubmitError(data.error || "ส่งออเดอร์ไม่สำเร็จ กรุณาลองอีกครั้ง");
@@ -401,10 +545,18 @@ function OrderPageContent() {
             </button>
             <div className="min-w-0">
               <h1 className="text-lg font-bold leading-tight">เมนูอาหาร</h1>
-              {isMember && (
+              {isMember && memberName ? (
                 <p className="truncate text-xs font-medium text-amber">
-                  สวัสดี {memberName} สมาชิกลด 10%
+                  ⭐ สวัสดีคุณ {memberName} (สมาชิกลด 10%)
                 </p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowMemberModal(true)}
+                  className="text-xs font-semibold text-amber hover:underline flex items-center gap-1 mt-0.5 cursor-pointer"
+                >
+                  <span>⭐ เข้าสู่ระบบสมาชิก (ลด 10%)</span>
+                </button>
               )}
             </div>
           </div>
@@ -434,6 +586,17 @@ function OrderPageContent() {
               </button>
             )}
 
+            {/* Live Dining Timer (แสดงนับเวลาสดเมื่อเปิดโต๊ะแล้ว ไม่ต้องกดเริ่มเอง) */}
+            {tableNumber && tableStatus === "OCCUPIED" && sessionStartTime && (
+              <div
+                className="flex items-center gap-1.5 rounded-md border border-orange/50 bg-orange/15 px-3 py-1.5 text-xs font-mono font-bold text-orange shadow-sm animate-pulse"
+                title={`เริ่มเวลา: ${new Date(sessionStartTime).toLocaleTimeString("th-TH")} น.`}
+              >
+                <span className="size-2 rounded-full bg-orange animate-ping" />
+                <span>⏱️ {formatTimerDuration(elapsedSeconds)}</span>
+              </div>
+            )}
+
             {/* Status / Tracker Button */}
             {tableNumber && (
               <button
@@ -456,6 +619,21 @@ function OrderPageContent() {
                     ✓ เสิร์ฟครบ
                   </span>
                 ) : null}
+              </button>
+            )}
+
+            {/* Quick PromptPay Payment Button */}
+            {tableNumber && tableTotalAmount > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowPaymentModal(true)}
+                className={`flex items-center gap-1.5 rounded-md border border-blue-500/40 bg-blue-500/15 px-3 py-1.5 text-xs font-bold text-blue-300 hover:bg-blue-500/25 transition shadow-sm ${FOCUS}`}
+                title="สแกนจ่ายพร้อมเพย์ล็อคยอดเงิน"
+              >
+                <span>💳 จ่ายเงิน</span>
+                <span className="font-extrabold text-white">
+                  ฿{tableTotalAmount.toLocaleString()}
+                </span>
               </button>
             )}
 
@@ -486,6 +664,42 @@ function OrderPageContent() {
           </div>
         </div>
       </header>
+
+      {/* ── Table Dining Session Banner ── */}
+      {tableNumber && (
+        tableStatus === "OCCUPIED" && sessionStartTime ? (
+          <div className="bg-glass border-b border-line px-4 py-2 text-xs text-ink-2 flex flex-wrap items-center justify-between gap-2 animate-fade-quick">
+            <div className="flex items-center gap-2">
+              <span className="text-orange font-bold">⏱️ โต๊ะนี้กำลังรับประทานอาหาร</span>
+              <span className="text-ink-3">•</span>
+              <span className="text-ink-3">เริ่มตั้งแต่เวลา {new Date(sessionStartTime).toLocaleTimeString("th-TH")} น.</span>
+              <span className="text-ink-3">•</span>
+              <span className="font-mono text-orange font-bold">รับประทานมาแล้ว {formatTimerDuration(elapsedSeconds)}</span>
+            </div>
+            <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded">
+              ● สถานะโต๊ะ: กำลังรับประทาน
+            </span>
+          </div>
+        ) : (
+          <div className="bg-glass border-b border-line px-4 py-2 text-xs text-ink-2 flex flex-wrap items-center justify-between gap-3 animate-fade-quick">
+            <div className="flex items-center gap-2">
+              <span className="text-base">👋</span>
+              <span>
+                <strong>ยินดีต้อนรับสู่โต๊ะ {tableNumber}!</strong> ระบบจะเริ่มนับเวลาทานอาหารอัตโนมัติทันทีเมื่อท่านใส่ชื่อสมาชิกหรือกดสั่งอาหาร
+              </span>
+            </div>
+            {!isMember && (
+              <button
+                type="button"
+                onClick={() => setShowMemberModal(true)}
+                className="shrink-0 rounded-md border border-amber/40 bg-amber/10 px-3 py-1 text-xs font-bold text-amber hover:bg-amber/20 transition cursor-pointer"
+              >
+                ⭐ ใส่ชื่อสมาชิก (รับส่วนลด 10%)
+              </button>
+            )}
+          </div>
+        )
+      )}
 
       <main className="mx-auto max-w-7xl">
         {/* Search */}
@@ -1110,6 +1324,18 @@ function OrderPageContent() {
                 </span>
               </div>
               <div className="flex items-center gap-2">
+                {tableTotalAmount > 0 && (
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 rounded-md bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 px-4 py-2.5 text-sm font-bold text-white shadow-md hover:brightness-110 transition cursor-pointer"
+                    onClick={() => setShowPaymentModal(true)}
+                  >
+                    <span>💳 ชำระเงินพร้อมเพย์</span>
+                    <span className="font-mono text-amber-300 font-extrabold">
+                      (฿{tableTotalAmount.toLocaleString()})
+                    </span>
+                  </button>
+                )}
                 <button
                   type="button"
                   className="rounded-md border border-line px-4 py-2.5 text-sm font-medium text-ink-2 hover:bg-glass hover:text-ink"
@@ -1194,6 +1420,101 @@ function OrderPageContent() {
                 บันทึก
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal ชำระเงินผ่านพร้อมเพย์ ล็อคยอดอัตโนมัติ */}
+      <PromptPayModal
+        isOpen={showPaymentModal}
+        onClose={() => setShowPaymentModal(false)}
+        orderId={orderId || tableOrders[0]?.id || tableOrders[0]?.order_id}
+        tableNumber={tableNumber}
+        amount={tableTotalAmount}
+        customerName={isMember && memberName ? memberName : (tableOrders[0]?.customerName || (tableNumber ? `ลูกค้าโต๊ะ ${tableNumber}` : "ลูกค้าทั่วไป"))}
+        isStaff={false}
+        onPaymentSuccess={async () => {
+          setSessionStartTime(null);
+          setElapsedSeconds(0);
+          setTableOrders([]);
+          setCart([]);
+          try {
+            localStorage.removeItem("pos_table_number");
+          } catch (e) {}
+          setTimeout(() => {
+            router.push("/");
+          }, 1500);
+        }}
+      />
+
+      {/* Modal สมาชิกสำหรับหน้า /order */}
+      {showMemberModal && (
+        <div
+          className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm animate-fade-quick"
+          onClick={() => setShowMemberModal(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-line bg-panel p-6 shadow-2xl animate-scale-in text-ink"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-line pb-3 mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">⭐</span>
+                <h3 className="font-bold text-base">เข้าสู่ระบบสมาชิก</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowMemberModal(false)}
+                className="text-ink-3 hover:text-ink text-sm"
+              >
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleMemberLoginInOrder} className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-ink-2 block mb-1">
+                  ชื่อ - นามสกุล (สมาชิก)
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="เช่น สมชาย ใจดี"
+                  value={memberFormName}
+                  onChange={(e) => setMemberFormName(e.target.value)}
+                  className="w-full rounded-md border border-line bg-glass px-3.5 py-2 text-sm text-ink placeholder:text-ink-3 focus:border-orange focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-ink-2 block mb-1">
+                  เบอร์โทรศัพท์
+                </label>
+                <input
+                  type="tel"
+                  placeholder="0xx-xxx-xxxx"
+                  value={memberFormPhone}
+                  onChange={(e) => setMemberFormPhone(e.target.value)}
+                  className="w-full rounded-md border border-line bg-glass px-3.5 py-2 text-sm text-ink placeholder:text-ink-3 focus:border-orange focus:outline-none"
+                />
+              </div>
+              <p className="text-[11px] text-amber leading-tight">
+                💡 เข้าสู่ระบบสมาชิกรับส่วนลดทันที 10% และระบบจะเริ่มนับเวลาทานอาหารโต๊ะ #{tableNumber || "-"} ให้อัตโนมัติทันที
+              </p>
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowMemberModal(false)}
+                  className="flex-1 rounded-md border border-line py-2 text-xs font-semibold text-ink-2 hover:bg-glass hover:text-ink"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 rounded-md bg-orange py-2 text-xs font-black text-[#0a0a0f] hover:brightness-110"
+                >
+                  ยืนยันสมาชิก (เริ่มเปิดโต๊ะ)
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
