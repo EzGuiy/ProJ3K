@@ -25,6 +25,29 @@ export default function PromptPayModal({
   const [paidSuccess, setPaidSuccess] = useState(false);
   const [paymentInfo, setPaymentInfo] = useState(null);
   const [error, setError] = useState("");
+  const [redirectCountdown, setRedirectCountdown] = useState(3);
+
+  // เมื่อชำระเงินสำเร็จ (ฝั่งลูกค้า) ให้นับถอยหลังและเด้งกลับหน้าแรกอัตโนมัติ ถือว่าจ่ายจบแล้ว
+  useEffect(() => {
+    let interval;
+    if (paidSuccess && !isStaff) {
+      setRedirectCountdown(3);
+      interval = setInterval(() => {
+        setRedirectCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            try {
+              localStorage.removeItem("pos_table_number");
+            } catch (e) {}
+            window.location.href = "/";
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [paidSuccess, isStaff]);
 
   const numAmount = Math.max(0, Number(amount) || 0);
 
@@ -204,8 +227,10 @@ export default function PromptPayModal({
               <h3 className="text-xl font-black text-white">
                 ชำระเงินสำเร็จแล้ว!
               </h3>
-              <p className="mt-1 text-xs text-white/60">
-                ระบบได้บันทึกการรับชำระเงินและปิดบิลเรียบร้อยแล้ว
+              <p className="mt-1 text-xs text-emerald-400 font-semibold">
+                {isStaff
+                  ? "ระบบได้บันทึกการรับชำระเงิน ปิดบิล และเคลียร์สถานะโต๊ะเรียบร้อยแล้ว"
+                  : `ระบบหยุดเวลาโต๊ะเรียบร้อยแล้ว กำลังพาท่านกลับสู่หน้าแรกใน ${redirectCountdown} วินาที...`}
               </p>
 
               {/* Payment Summary Box */}
@@ -248,10 +273,18 @@ export default function PromptPayModal({
 
               <button
                 type="button"
-                onClick={onClose}
-                className="mt-6 w-full rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 py-3 text-sm font-bold text-black shadow-lg hover:brightness-110 transition"
+                onClick={() => {
+                  onClose();
+                  if (!isStaff) {
+                    try {
+                      localStorage.removeItem("pos_table_number");
+                    } catch (e) {}
+                    window.location.href = "/";
+                  }
+                }}
+                className="mt-6 w-full rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 py-3 text-sm font-bold text-black shadow-lg hover:brightness-110 transition flex items-center justify-center gap-2 cursor-pointer"
               >
-                เสร็จสิ้น
+                <span>{isStaff ? "เสร็จสิ้น" : "🏠 เสร็จสิ้น (กลับหน้าแรกทันที)"}</span>
               </button>
             </div>
           ) : (

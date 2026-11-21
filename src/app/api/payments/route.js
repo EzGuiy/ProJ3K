@@ -219,20 +219,19 @@ export async function POST(request) {
     }
 
     if (clearTable && resolvedTableId) {
-      // ตรวจสอบว่ายังมีออเดอร์ OPEN หลงเหลืออยู่หรือไม่
-      const [remainingOpen] = await pool.query(
-        `SELECT COUNT(*) AS open_count FROM orders WHERE table_id = ? AND status = 'OPEN'`,
+      // ปิดทุกออเดอร์ของโต๊ะนี้ให้เป็น CLOSED (ลูกค้าชำระเงินจบแล้ว)
+      await pool.query(
+        `UPDATE orders SET status = 'CLOSED', updated_at = NOW() WHERE table_id = ? AND status = 'OPEN'`,
         [resolvedTableId]
       );
 
-      if (remainingOpen[0].open_count === 0) {
-        await pool.query(
-          `UPDATE dining_table 
-           SET status = 'AVAILABLE', occupied_at = NULL, current_order_id = NULL, updated_at = NOW() 
-           WHERE table_id = ?`,
-          [resolvedTableId]
-        );
-      }
+      // หยุดเวลาและเคลียร์สถานะโต๊ะคืนเป็น AVAILABLE ทันที
+      await pool.query(
+        `UPDATE dining_table 
+         SET status = 'AVAILABLE', occupied_at = NULL, current_order_id = NULL, updated_at = NOW() 
+         WHERE table_id = ?`,
+        [resolvedTableId]
+      );
     }
 
     return NextResponse.json({
