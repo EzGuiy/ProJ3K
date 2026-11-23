@@ -38,7 +38,7 @@ export default function PromptPayModal({
             clearInterval(interval);
             try {
               localStorage.removeItem("pos_table_number");
-            } catch (e) {}
+            } catch (e) { }
             window.location.href = "/";
             return 0;
           }
@@ -278,7 +278,7 @@ export default function PromptPayModal({
                   if (!isStaff) {
                     try {
                       localStorage.removeItem("pos_table_number");
-                    } catch (e) {}
+                    } catch (e) { }
                     window.location.href = "/";
                   }
                 }}
@@ -342,28 +342,7 @@ export default function PromptPayModal({
               </div>
 
               {/* Receiver Info & Copy Button */}
-              <div className="mt-4 w-full rounded-xl bg-white/[0.04] border border-white/10 p-3 flex items-center justify-between gap-3 text-xs">
-                <div>
-                  <span className="text-[10px] text-white/50 block">
-                    เบอร์พร้อมเพย์รับเงิน (เจ้าของร้าน):
-                  </span>
-                  <div className="font-mono text-sm font-extrabold text-white flex items-center gap-2 mt-0.5">
-                    <span>{formatPhoneDisplay(PROMPTPAY_PHONE)}</span>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleCopyPhone}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-bold transition border ${
-                    copied
-                      ? "bg-green-500/20 text-green-300 border-green-500/40"
-                      : "bg-white/10 hover:bg-white/15 text-white/90 border-white/10"
-                  }`}
-                  title="คัดลอกเบอร์โทรศัพท์"
-                >
-                  {copied ? "✓ คัดลอกแล้ว" : "📋 คัดลอกเบอร์"}
-                </button>
-              </div>
+
 
               {/* Instructions */}
               <div className="mt-3 w-full rounded-xl bg-blue-950/30 border border-blue-500/20 px-3.5 py-2.5 text-[11px] text-blue-200/90 leading-relaxed">
