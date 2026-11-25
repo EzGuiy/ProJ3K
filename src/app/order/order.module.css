@@ -289,6 +289,13 @@
   line-height: 1;
 }
 
+.menuImage {
+  width: 100%;
+  height: 150px;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+}
+
 .spicyDots {
   display: flex;
   gap: 2px;

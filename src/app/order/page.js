@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Image from "next/image";
 import { menuCategories, menuItems } from "@/lib/menu";
 import styles from "./order.module.css";
 
@@ -262,7 +263,17 @@ function OrderPageContent() {
                 <span className={styles.popularBadge}>🔥 ยอดนิยม</span>
               )}
               <div className={styles.menuCardTop}>
-                <span className={styles.menuEmoji}>{item.image}</span>
+                {item.imageUrl ? (
+                  <Image
+                    src={item.imageUrl}
+                    alt={item.name}
+                    width={400}
+                    height={300}
+                    className={styles.menuImage}
+                  />
+                ) : (
+                  <span className={styles.menuEmoji}>{item.image}</span>
+                )}
                 {spicyDots(item.spicyLevel)}
               </div>
               <div className={styles.menuCardBody}>
