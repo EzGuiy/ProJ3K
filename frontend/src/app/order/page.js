@@ -4,6 +4,7 @@
 import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import PromptPayModal from "@/components/PromptPayModal";
+import { menuItems as defaultMenuItems } from "@/lib/menu";
 
 /* ---------- Shared bits ---------- */
 
@@ -46,6 +47,10 @@ function Icon({ name, className = "size-5" }) {
 const isImageSrc = (v) =>
   typeof v === "string" &&
   (/^(https?:)?\/\//.test(v) || v.startsWith("/") || /\.(png|jpe?g|webp|avif|gif|svg)$/i.test(v));
+
+const menuImagesByName = new Map(
+  defaultMenuItems.map((item) => [item.name, item.image])
+);
 
 function MenuImage({ src, className = "", emojiClass = "text-5xl" }) {
   return (
@@ -360,19 +365,25 @@ function OrderPageContent() {
           setMenuCategories(mappedCats);
         }
         if (data.menus) {
-          const mapped = data.menus.map((m) => ({
-            id: m.menu_id,
-            menu_id: m.menu_id,
-            name: m.name,
-            nameEn: m.name_en || "",
-            description: m.description || "",
-            price: Number(m.price),
-            category: m.category_id,
-            image: m.image_url || "🍽️",
-            image_url: m.image_url || "🍽️",
-            popular: Boolean(m.is_popular),
-            spicyLevel: Number(m.spicy_level || 0),
-          }));
+          const mapped = data.menus.map((m) => {
+            const image = isImageSrc(m.image_url)
+              ? m.image_url
+              : menuImagesByName.get(m.name) || m.image_url || "🍽️";
+
+            return {
+              id: m.menu_id,
+              menu_id: m.menu_id,
+              name: m.name,
+              nameEn: m.name_en || "",
+              description: m.description || "",
+              price: Number(m.price),
+              category: m.category_id,
+              image,
+              image_url: image,
+              popular: Boolean(m.is_popular),
+              spicyLevel: Number(m.spicy_level || 0),
+            };
+          });
           setMenuItems(mapped);
         }
       })
