@@ -274,6 +274,9 @@ export default function StaffPage() {
   const fetchReservations = useCallback(async () => {
     try {
       const response = await fetch("/api/reservations");
+      if (!response.ok) {
+        throw new Error(`Request failed with status ${response.status}`);
+      }
       const data = await response.json();
       setReservations(data.reservations || []);
     } catch (error) {

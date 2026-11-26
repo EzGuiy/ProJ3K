@@ -5,6 +5,8 @@ import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import PromptPayModal from "@/components/PromptPayModal";
 import { menuItems as defaultMenuItems } from "@/lib/menu";
+import { DEFAULT_SYSTEM_SETTINGS } from "@/lib/settingsDefaults";
+import { calculateOrderTotals } from "@/lib/orderTotals";
 
 /* ---------- Shared bits ---------- */
 
@@ -121,6 +123,32 @@ function OrderPageContent() {
     { id: "all", name: "ทั้งหมด", icon: "🍽️" },
   ]);
   const [loadingMenu, setLoadingMenu] = useState(true);
+  const [systemSettings, setSystemSettings] = useState(DEFAULT_SYSTEM_SETTINGS);
+  const [settingsLoading, setSettingsLoading] = useState(true);
+  const [settingsError, setSettingsError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+
+    fetch("/api/admin/settings", { cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || "โหลดการตั้งค่าราคาไม่สำเร็จ");
+        }
+        if (active) setSystemSettings(data.settings);
+      })
+      .catch((error) => {
+        if (active) setSettingsError(error.message);
+      })
+      .finally(() => {
+        if (active) setSettingsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [cart, setCart] = useState([]);
@@ -485,6 +513,10 @@ function OrderPageContent() {
   // ส่งออเดอร์ลง MySQL Database
   const handleSubmitOrder = async () => {
     if (cart.length === 0) return;
+    if (settingsLoading || settingsError) {
+      setSubmitError("ยังโหลดการตั้งค่าราคาไม่สำเร็จ กรุณารีเฟรชหน้าแล้วลองอีกครั้ง");
+      return;
+    }
 
     setIsSubmitting(true);
     setSubmitError("");
@@ -538,7 +570,11 @@ function OrderPageContent() {
   };
 
   const discount = isMember ? Math.round(cartTotal * 0.1) : 0;
-  const netTotal = isMember ? Math.round(cartTotal * 0.9) : cartTotal;
+  const {
+    serviceChargeAmount,
+    taxAmount,
+    netTotal,
+  } = calculateOrderTotals(cartTotal, discount, systemSettings);
 
   /* ---------- Main page ---------- */
   return (
@@ -988,6 +1024,23 @@ function OrderPageContent() {
                       <span>-฿{discount.toLocaleString()}</span>
                     </div>
                   )}
+                  {serviceChargeAmount > 0 && (
+                    <div className="flex justify-between text-sm text-ink-2">
+                      <span>ค่าบริการ ({systemSettings.serviceChargeRate}%)</span>
+                      <span>฿{serviceChargeAmount.toLocaleString()}</span>
+                    </div>
+                  )}
+                  {taxAmount > 0 && (
+                    <div className="flex justify-between text-sm text-ink-2">
+                      <span>ภาษี ({systemSettings.taxRate}%)</span>
+                      <span>฿{taxAmount.toLocaleString()}</span>
+                    </div>
+                  )}
+                  {settingsError && (
+                    <p role="alert" className="text-sm text-red-400">
+                      โหลดการตั้งค่าภาษีและค่าบริการไม่สำเร็จ: {settingsError}
+                    </p>
+                  )}
                   <div className="flex justify-between border-t border-line pt-3 text-[1.2rem] font-extrabold text-ink">
                     <span>ยอดสุทธิ</span>
                     <span>฿{netTotal.toLocaleString()}</span>
@@ -1006,7 +1059,7 @@ function OrderPageContent() {
                   <button
                     className={`flex w-full items-center justify-center gap-2.5 rounded-md bg-orange p-4 text-base font-bold transition hover:enabled:brightness-110 disabled:cursor-not-allowed disabled:opacity-70 ${ON_ORANGE} ${FOCUS}`}
                     onClick={handleSubmitOrder}
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || settingsLoading || Boolean(settingsError)}
                   >
                     {isSubmitting ? (
                       <>

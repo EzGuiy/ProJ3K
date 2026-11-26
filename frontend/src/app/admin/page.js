@@ -257,7 +257,7 @@ export default function AdminDashboardPage() {
                   </thead>
                   <tbody>
                     {recentOrders.map((ord) => (
-                      <tr key={ord.id || ord._id} className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors">
+                      <tr key={ord.order_id || ord.id || ord._id} className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors">
                         <td className="px-5 py-3 font-medium text-[#ff6b35]">{ord.orderNumber || ord.id}</td>
                         <td className="px-5 py-3 text-[#e8eaed]">{ord.tableName || ord.table || "กลับบ้าน"}</td>
                         <td className="px-5 py-3 text-[#9aa0a6]">

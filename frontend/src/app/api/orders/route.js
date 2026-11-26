@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import crypto from 'crypto';
+import { getSystemSettings } from '@/lib/systemSettings';
+import { calculateOrderTotals } from '@/lib/orderTotals';
 
 // GET /api/orders — ดึงรายการออเดอร์ทั้งหมดจาก MySQL
 export async function GET(request) {
@@ -292,7 +294,12 @@ export async function POST(request) {
 
     const isMemberDiscount = Boolean(isMember || member_id);
     const discount_amount = isMemberDiscount ? Math.round(subtotal * 0.1) : 0;
-    const net_total = Math.max(0, subtotal - discount_amount);
+    const settings = await getSystemSettings();
+    const {
+      serviceChargeAmount: service_charge_amount,
+      taxAmount: tax_amount,
+      netTotal: net_total,
+    } = calculateOrderTotals(subtotal, discount_amount, settings);
 
     // 5. บันทึกลงตาราง orders
     const order_id = crypto.randomUUID();
@@ -372,6 +379,8 @@ export async function POST(request) {
           tableNumber: tableNumber || '-',
           totalAmount: net_total,
           net_total,
+          service_charge_amount,
+          tax_amount,
           status: 'pending',
           created_at: new Date().toISOString(),
         },

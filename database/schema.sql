@@ -10,6 +10,13 @@ CREATE DATABASE IF NOT EXISTS `restaurant_pos`
   CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE `restaurant_pos`;
 
+CREATE TABLE IF NOT EXISTS `app_settings` (
+  `setting_key` VARCHAR(32) NOT NULL,
+  `settings_json` JSON NOT NULL,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`setting_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ปิด FK ชั่วคราวเพื่อให้สร้างตารางซ้ำได้โดยไม่ชนลำดับ dependency
 SET FOREIGN_KEY_CHECKS = 0;
 
